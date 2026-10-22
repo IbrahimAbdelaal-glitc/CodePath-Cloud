@@ -1,0 +1,24 @@
+# Render Blueprint for the API
+# The database is hosted elsewhere (Neon or Supabase), so enter its URLs in the Render dashboard.
+services:
+  - type: web
+    name: codepath-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

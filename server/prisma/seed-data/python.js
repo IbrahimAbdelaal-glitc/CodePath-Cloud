@@ -1,0 +1,252 @@
+const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+
+export default {
+  roadmap: {
+    slug: 'python-backend',
+    title: 'Backend Development with Python',
+    summary: 'From Python fundamentals to fast APIs with FastAPI.',
+    description:
+      'A hands-on path from Python fundamentals and object-oriented programming to building modern APIs with FastAPI and validating data with Pydantic, with a focus on good practices and avoiding common mistakes.',
+    category: 'Backend',
+    difficulty: 'BEGINNER',
+    prerequisites: ['Python 3.11 or later installed', 'Comfortable using the terminal'],
+    isFeatured: true,
+    order: 3,
+  },
+  modules: [
+    {
+      key: 'py-fundamentals',
+      title: 'Python Fundamentals',
+      description: 'Types, lists, dictionaries and functions.',
+      difficulty: 'BEGINNER',
+      lessons: [
+        {
+          key: 'py-basics',
+          title: 'Types, Lists and Dictionaries',
+          summary: 'The core data structures and how to work with them.',
+          difficulty: 'BEGINNER',
+          estimatedMinutes: 25,
+          keyTakeaways: [
+            '/ always returns a float, and // is floor division.',
+            'Indexing starts at 0, and negative indexes count from the end.',
+            'A slice [a:b] excludes item b.',
+            'List comprehensions build lists concisely.',
+          ],
+          resources: [
+            { title: 'The official Python tutorial', url: 'https://docs.python.org/3/tutorial/', type: 'DOCUMENTATION' },
+            { title: 'Data structures in Python', url: 'https://docs.python.org/3/tutorial/datastructures.html', type: 'DOCUMENTATION' },
+            { title: 'Video tutorials on Python basics', url: yt('Python for beginners tutorial'), type: 'VIDEO' },
+          ],
+          quizzes: [
+            {
+              question: 'What does this code print? Write each result on its own line.',
+              questionType: 'CODE_OUTPUT',
+              codeSnippet: 'nums = [1, 2, 3, 4, 5]\nprint(nums[1:3])\nprint(nums[-1])',
+              correctAnswer: '[2, 3]\n5',
+              explanation: 'The slice [1:3] takes only the items at indexes 1 and 2, and index -1 refers to the last item.',
+              topic: 'py-lists',
+            },
+            {
+              question: 'What does this code print?',
+              questionType: 'CODE_OUTPUT',
+              codeSnippet: 'print(7 // 2, 7 / 2, 2 ** 3)',
+              correctAnswer: '3 3.5 8',
+              explanation: '// is floor division (3), / always returns a float (3.5), and ** is the exponent (8). print separates values with a space.',
+              topic: 'py-types',
+            },
+            {
+              question: 'Complete the missing keyword in the list comprehension:',
+              questionType: 'FILL_IN_THE_BLANK',
+              codeSnippet: 'squares = [n * n ___ n in range(5)]',
+              correctAnswer: 'for',
+              explanation: 'A list comprehension has the form [expression for variable in iterable], producing [0, 1, 4, 9, 16] here.',
+              topic: 'py-lists',
+            },
+          ],
+        },
+        {
+          key: 'py-functions',
+          title: 'Functions and Parameters',
+          summary: 'Default values, *args, **kwargs and type hints.',
+          difficulty: 'BEGINNER',
+          estimatedMinutes: 30,
+          keyTakeaways: [
+            'Default values are created once, when the function is defined.',
+            'Never use a list or dict as a default; use None.',
+            '*args collects positional arguments and **kwargs collects keyword arguments.',
+            'Type hints document code and are used by tools.',
+          ],
+          resources: [
+            { title: 'Defining functions in the Python tutorial', url: 'https://docs.python.org/3/tutorial/controlflow.html#defining-functions', type: 'DOCUMENTATION' },
+            { title: 'Real Python: *args and **kwargs', url: 'https://realpython.com/python-kwargs-and-args/', type: 'ARTICLE' },
+            { title: 'Video tutorials on Python functions', url: yt('Python functions tutorial'), type: 'VIDEO' },
+          ],
+          quizzes: [
+            {
+              question: 'What does this code print?',
+              questionType: 'CODE_OUTPUT',
+              codeSnippet: 'def add_item(item, items=[]):\n    items.append(item)\n    return items\n\nadd_item("a")\nprint(add_item("b"))',
+              correctAnswer: "['a', 'b']",
+              acceptedAnswers: ['["a", "b"]'],
+              explanation: 'The default list was created once when the function was defined, so both calls share it and the items accumulate. The fix is to use None as the default.',
+              topic: 'py-functions',
+            },
+            {
+              question: 'What does the *args parameter hold inside a function?',
+              questionType: 'MULTIPLE_CHOICE',
+              options: ['A dict of keyword arguments', 'A tuple of all extra positional arguments', 'A memory pointer', 'Always an empty list'],
+              correctAnswer: 'A tuple of all extra positional arguments',
+              explanation: '*args collects positional arguments into a tuple, while **kwargs collects keyword arguments into a dict.',
+              topic: 'py-functions',
+            },
+            {
+              question: 'Complete the keyword that returns a value from the function:',
+              questionType: 'FILL_IN_THE_BLANK',
+              codeSnippet: 'def greet(name, greeting="Hello"):\n    ___ f"{greeting}, {name}"',
+              correctAnswer: 'return',
+              explanation: 'return ends the function and hands the value back to the caller. Without it, the function returns None.',
+              topic: 'py-functions',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      key: 'py-oop',
+      title: 'Object-Oriented Programming',
+      description: 'Classes, inheritance, polymorphism and dataclasses.',
+      difficulty: 'INTERMEDIATE',
+      prerequisites: ['py-fundamentals'],
+      lessons: [
+        {
+          key: 'py-classes',
+          title: 'Classes and Inheritance',
+          summary: '__init__, self, inheritance and polymorphism.',
+          difficulty: 'INTERMEDIATE',
+          estimatedMinutes: 35,
+          keyTakeaways: [
+            '__init__ initialises an object when it is created.',
+            'self refers to the current object.',
+            'A subclass can override its parent’s methods.',
+            'dataclass reduces boilerplate for data classes.',
+          ],
+          resources: [
+            { title: 'Classes in the Python tutorial', url: 'https://docs.python.org/3/tutorial/classes.html', type: 'DOCUMENTATION' },
+            { title: 'The dataclasses module', url: 'https://docs.python.org/3/library/dataclasses.html', type: 'DOCUMENTATION' },
+            { title: 'Video tutorials on OOP in Python', url: yt('Python OOP tutorial'), type: 'VIDEO' },
+          ],
+          quizzes: [
+            {
+              question: 'Complete the name of the initialiser called when an object is created:',
+              questionType: 'FILL_IN_THE_BLANK',
+              codeSnippet: 'class Student:\n    def ___(self, name):\n        self.name = name',
+              correctAnswer: '__init__',
+              explanation: '__init__ is the special initialiser method; Python calls it automatically when you write Student("...").',
+              topic: 'py-classes',
+            },
+            {
+              question: 'What does this code print? Write each result on its own line.',
+              questionType: 'CODE_OUTPUT',
+              codeSnippet:
+                'class Animal:\n    def speak(self):\n        return "..."\n\nclass Cat(Animal):\n    def speak(self):\n        return "Meow"\n\nfor a in [Animal(), Cat()]:\n    print(a.speak())',
+              correctAnswer: '...\nMeow',
+              explanation: 'The first object is an Animal, so it prints "...", and the second is a Cat, which overrides speak, so it prints "Meow". That is polymorphism.',
+              topic: 'py-classes',
+            },
+            {
+              question: 'What does the self parameter refer to in an instance method?',
+              questionType: 'MULTIPLE_CHOICE',
+              options: ['The parent class', 'The current object the method was called on', 'The current module', 'A reserved word with no meaning'],
+              correctAnswer: 'The current object the method was called on',
+              explanation: 'When you write course.add_lesson(), Python passes course automatically as the first argument, which we call self by convention.',
+              topic: 'py-classes',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      key: 'fastapi',
+      title: 'APIs with FastAPI',
+      description: 'Routing and data validation with Pydantic.',
+      difficulty: 'ADVANCED',
+      prerequisites: ['py-oop'],
+      lessons: [
+        {
+          key: 'fastapi-intro',
+          title: 'Building Your First FastAPI App',
+          summary: 'Routes, path and query parameters, and error handling.',
+          difficulty: 'INTERMEDIATE',
+          estimatedMinutes: 35,
+          keyTakeaways: [
+            'Decorators such as @app.get bind routes to functions.',
+            'Type hints drive automatic validation and conversion.',
+            'Invalid input is rejected with status 422.',
+            'Interactive docs are available at /docs.',
+          ],
+          resources: [
+            { title: 'The official FastAPI tutorial', url: 'https://fastapi.tiangolo.com/tutorial/', type: 'DOCUMENTATION' },
+            { title: 'Path parameters in FastAPI', url: 'https://fastapi.tiangolo.com/tutorial/path-params/', type: 'ARTICLE' },
+            { title: 'Video tutorials on FastAPI', url: yt('FastAPI tutorial'), type: 'VIDEO' },
+          ],
+          quizzes: [
+            {
+              question: 'Complete the decorator that defines an endpoint for GET requests:',
+              questionType: 'FILL_IN_THE_BLANK',
+              codeSnippet:
+                'from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.___("/courses/{course_id}")\ndef read_course(course_id: int):\n    return {"id": course_id}',
+              correctAnswer: 'get',
+              explanation: '@app.get registers the function as the handler for GET requests on that route.',
+              topic: 'fastapi-routing',
+            },
+            {
+              question: 'Which status code does FastAPI return for /courses/abc when course_id is typed as int?',
+              questionType: 'MULTIPLE_CHOICE',
+              options: ['200', '404', '422', '500'],
+              correctAnswer: '422',
+              explanation: 'FastAPI validates the parameter type; "abc" cannot be converted to an int, so it responds with 422 Unprocessable Entity and error details.',
+              topic: 'fastapi-routing',
+            },
+          ],
+        },
+        {
+          key: 'pydantic',
+          title: 'Validating Data with Pydantic',
+          summary: 'Input and output models and automatic type coercion.',
+          difficulty: 'ADVANCED',
+          estimatedMinutes: 30,
+          keyTakeaways: [
+            'BaseModel defines the shape of data and validates it.',
+            'Field adds constraints such as lengths and bounds.',
+            'Pydantic converts compatible values automatically in its default mode.',
+            'response_model prevents leaking sensitive fields.',
+          ],
+          resources: [
+            { title: 'Pydantic documentation', url: 'https://docs.pydantic.dev/latest/', type: 'DOCUMENTATION' },
+            { title: 'Request body in FastAPI', url: 'https://fastapi.tiangolo.com/tutorial/body/', type: 'ARTICLE' },
+            { title: 'Video tutorials on Pydantic', url: yt('Pydantic FastAPI tutorial'), type: 'VIDEO' },
+          ],
+          quizzes: [
+            {
+              question: 'What is the main role of BaseModel in Pydantic?',
+              questionType: 'MULTIPLE_CHOICE',
+              options: ['Connecting to the database', 'Defining, validating and converting the shape of data', 'Running the server', 'Hashing passwords'],
+              correctAnswer: 'Defining, validating and converting the shape of data',
+              explanation: 'BaseModel declares fields and their types, validates and converts input, and produces a JSON schema that FastAPI uses for its docs.',
+              topic: 'pydantic-models',
+            },
+            {
+              question: 'What does this code print?',
+              questionType: 'CODE_OUTPUT',
+              codeSnippet:
+                'from pydantic import BaseModel\n\nclass Lesson(BaseModel):\n    title: str\n    minutes: int\n\nlesson = Lesson(title="Intro", minutes="45")\nprint(lesson.minutes + 5)',
+              correctAnswer: '50',
+              explanation: 'In its default mode Pydantic converts the string "45" to the integer 45 because the field is an int, so the result is 50.',
+              topic: 'pydantic-models',
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};

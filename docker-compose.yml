@@ -1,0 +1,46 @@
+# Run the full platform locally: PostgreSQL + API + web app
+# Usage:
+#   1) Copy .env.docker.example to .env and fill in your own values
+#   2) docker compose up --build
+#   3) docker compose exec server npm run db:seed
+#   Open http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-codepath}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: codepath
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-codepath} -d codepath']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codepath}:${POSTGRES_PASSWORD}@db:5432/codepath?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-codepath}:${POSTGRES_PASSWORD}@db:5432/codepath?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      CORS_ORIGIN: http://localhost:8080
+      PORT: 4000
+      NODE_ENV: production
+    ports:
+      - '4000:4000'
+
+  client:
+    build: ./client
+    depends_on:
+      - server
+    ports:
+      - '8080:80'
+
+volumes:
+  pgdata:
