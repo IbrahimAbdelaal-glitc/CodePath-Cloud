@@ -2592,3 +2592,237 @@ details.panel[open] > summary {
 .status-icon--bad {
   color: var(--danger);
 }
+
+/* ── Certificates ─────────────────────── */
+.certificate-page {
+  max-width: 980px;
+}
+.certificate-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.certificate-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.certificate {
+  position: relative;
+  padding: clamp(28px, 6vw, 64px) clamp(20px, 6vw, 72px);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.certificate::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 2px solid var(--brand-soft);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+.certificate__brand {
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.certificate__eyebrow {
+  margin: 0 0 18px;
+  color: var(--brand-2);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.certificate__lead {
+  margin: 0;
+  color: var(--muted);
+}
+.certificate__name {
+  margin: 8px 0 12px;
+  font-size: clamp(1.9rem, 5vw, 2.8rem);
+  overflow-wrap: anywhere;
+}
+.certificate__path {
+  margin: 8px 0 0;
+  font-size: clamp(1.25rem, 3.5vw, 1.6rem);
+  font-weight: 700;
+  color: var(--brand);
+}
+.certificate__path a {
+  color: inherit;
+  text-decoration: none;
+}
+.certificate__facts {
+  display: grid;
+  gap: 18px;
+  margin: 36px 0 0;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+@media (min-width: 720px) {
+  .certificate__facts {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.certificate__facts dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.certificate__facts dd {
+  margin: 4px 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.certificate__facts small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.certificate__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.certificate-share {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+@media (min-width: 960px) {
+  .certificate-share {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.certificate-share .panel {
+  margin-bottom: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.certificate-share .panel h2,
+.certificate-share .panel p {
+  margin: 0;
+}
+.certificate-share .btn--accent {
+  justify-self: start;
+}
+.copy-row {
+  display: flex;
+  gap: 8px;
+}
+.copy-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.li-fields {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.li-fields > div {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.li-fields dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.li-fields dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.certificate-earned {
+  display: flex;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-2) 25%, transparent);
+}
+.certificate-earned__icon {
+  color: var(--brand-2);
+  flex-shrink: 0;
+}
+.certificate-earned h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+.certificate-earned p {
+  margin: 0;
+  color: var(--ink-2);
+}
+.certificate-earned__actions,
+.cert-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.certificate-earned__actions {
+  margin-top: 12px;
+}
+.cert-list li {
+  align-items: center;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+  .site-header,
+  .site-footer,
+  .skip-link,
+  .no-print {
+    display: none !important;
+  }
+  body,
+  main {
+    background: #fff !important;
+  }
+  .certificate-page {
+    max-width: none;
+    padding: 0;
+  }
+  /* Always print in light colours, whatever the screen theme */
+  .certificate {
+    --surface: #ffffff;
+    --ink: #12201b;
+    --muted: #5f6b66;
+    --line: #e2ddcf;
+    --brand: #0b5d4b;
+    --brand-2: #0e7c66;
+    --brand-soft: #e1f0ea;
+    --accent: #f2b544;
+    color: var(--ink);
+    box-shadow: none;
+    break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .certificate__facts {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

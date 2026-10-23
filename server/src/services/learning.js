@@ -233,7 +233,7 @@ export function roadmapVisibilityWhere(user) {
 export async function assertLessonAccess(user, lessonId) {
   const lesson = await prisma.lesson.findFirst({
     where: { id: lessonId, module: { roadmap: roadmapVisibilityWhere(user) } },
-    select: { id: true, moduleId: true, module: { select: { roadmap: { select: { slug: true } } } } },
+    select: { id: true, moduleId: true, module: { select: { roadmap: { select: { id: true, slug: true } } } } },
   });
   if (!lesson) throw notFound('Lesson not found');
 
@@ -245,6 +245,33 @@ export async function assertLessonAccess(user, lessonId) {
     });
   }
   return { lesson, access };
+}
+
+// ── Active learning time ─────────────────────────────────────────
+// The lesson page sends a heartbeat about every 30 seconds while it is visible and in use.
+// Each heartbeat credits the time since the user's previous heartbeat on any lesson, but only when
+// that gap is at most MAX_HEARTBEAT_GAP_SECONDS. A longer gap starts a new session and credits nothing,
+// so idle time is never counted and parallel tabs cannot count the same minute twice.
+export const MAX_HEARTBEAT_GAP_SECONDS = 60;
+
+export async function recordLessonActivity(userId, lessonId) {
+  await prisma.$transaction(async (tx) => {
+    // Serializes heartbeats per user so two tabs never credit the same gap
+    await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${userId}))`;
+    const now = new Date();
+    const last = await tx.lessonActivity.findFirst({
+      where: { userId },
+      orderBy: { lastHeartbeatAt: 'desc' },
+      select: { lastHeartbeatAt: true },
+    });
+    const gap = last ? Math.round((now - last.lastHeartbeatAt) / 1000) : Infinity;
+    const credit = gap > 0 && gap <= MAX_HEARTBEAT_GAP_SECONDS ? gap : 0;
+    await tx.lessonActivity.upsert({
+      where: { userId_lessonId: { userId, lessonId } },
+      create: { userId, lessonId, activeSeconds: credit, firstActiveAt: now, lastHeartbeatAt: now },
+      update: { activeSeconds: { increment: credit }, lastHeartbeatAt: now },
+    });
+  });
 }
 
 // ── Server-side grading ─────────────────────────────────────────

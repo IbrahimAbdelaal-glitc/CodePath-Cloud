@@ -15,6 +15,8 @@ import NotFound from './pages/NotFound.jsx';
 
 // Heavier pages (Markdown, syntax highlighting, admin tools) load on demand
 const Lesson = lazy(() => import('./pages/Lesson.jsx'));
+const Certificate = lazy(() => import('./pages/Certificate.jsx'));
+const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 const ManageHome = lazy(() => import('./pages/manage/ManageHome.jsx'));
 const ManageRoadmap = lazy(() => import('./pages/manage/ManageRoadmap.jsx'));
 const LessonEditor = lazy(() => import('./pages/manage/LessonEditor.jsx'));
@@ -32,12 +34,14 @@ export default function App() {
           <Route path="register" element={<Register />} />
           <Route path="forgot-password" element={<ForgotPassword />} />
           <Route path="reset-password" element={<ResetPassword />} />
+          <Route path="verify/:code" element={<VerifyCertificate />} />
 
           <Route element={<RequireAuth />}>
             <Route path="lessons/:id" element={<Lesson />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="bookmarks" element={<Bookmarks />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="certificates/:id" element={<Certificate />} />
           </Route>
 
           <Route element={<RequireAuth roles={['INSTRUCTOR', 'ADMIN']} />}>

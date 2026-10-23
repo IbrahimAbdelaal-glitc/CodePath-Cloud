@@ -1,10 +1,12 @@
-// Personal student data: dashboard, bookmarks and topics to review.
+// Personal student data: dashboard, bookmarks, topics to review and certificates.
 // Every query here is scoped to the current user.
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { topicTag as topicTagSchema } from '../lib/validation.js';
+import { notFound } from '../lib/errors.js';
+import { idParams, topicTag as topicTagSchema } from '../lib/validation.js';
 import { requireAuth } from '../middleware/auth.js';
+import { issueCertificates, newVerificationCode, publicCertificate } from '../services/certificates.js';
 import {
   computeModuleAccess,
   lessonsForTopics,
@@ -312,6 +314,61 @@ router.post('/weaknesses/:tag/review', async (req, res) => {
   const tag = topicTagSchema.parse(req.params.tag);
   const topic = await markTopicReviewed(req.user.id, tag);
   res.json({ topic });
+});
+
+const certificateSelect = {
+  id: true,
+  roadmapTitle: true,
+  completedAt: true,
+  issuedAt: true,
+  accuracy: true,
+  questionsAnswered: true,
+  questionsTotal: true,
+  activeSeconds: true,
+  timeTrackedSince: true,
+  timeFullyTracked: true,
+  verificationCode: true,
+  roadmap: { select: { slug: true } },
+};
+
+router.get('/certificates', async (req, res) => {
+  // Also issues certificates for paths completed before certificates existed
+  await issueCertificates(req.user);
+  const certificates = await prisma.certificate.findMany({
+    where: { userId: req.user.id },
+    orderBy: { completedAt: 'desc' },
+    select: certificateSelect,
+  });
+  res.json({ certificates: certificates.map((c) => publicCertificate(c, req.user)) });
+});
+
+router.get('/certificates/:id', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  // Scoped to the current user: another user's certificate is reported as not found
+  const certificate = await prisma.certificate.findFirst({ where: { id, userId: req.user.id }, select: certificateSelect });
+  if (!certificate) throw notFound('Certificate not found');
+  res.json({ certificate: publicCertificate(certificate, req.user) });
+});
+
+const sharingSchema = z.object({ isPublic: z.boolean({ error: 'Sharing value must be true or false' }) });
+
+// Public verification is off until the student turns it on; turning it off revokes the link
+router.put('/certificates/:id/sharing', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const { isPublic } = sharingSchema.parse(req.body);
+  const existing = await prisma.certificate.findFirst({
+    where: { id, userId: req.user.id },
+    select: { verificationCode: true },
+  });
+  if (!existing) throw notFound('Certificate not found');
+
+  const verificationCode = isPublic ? existing.verificationCode || newVerificationCode() : null;
+  const certificate = await prisma.certificate.update({
+    where: { id },
+    data: { verificationCode },
+    select: certificateSelect,
+  });
+  res.json({ certificate: publicCertificate(certificate, req.user) });
 });
 
 export default router;

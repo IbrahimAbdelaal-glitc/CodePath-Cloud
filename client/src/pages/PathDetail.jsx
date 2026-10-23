@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { Bookmark, CheckCircle2, Circle, Clock, Eye, Layers, ListChecks, Lock, LogIn, PlayCircle, Users } from 'lucide-react';
+import { Award, Bookmark, CheckCircle2, Circle, Clock, Eye, Layers, ListChecks, Lock, LogIn, PlayCircle, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { useFetch } from '../lib/useFetch.js';
@@ -89,6 +89,12 @@ export default function PathDetail() {
                 ) : r.progress.percent === 100 ? (
                   <p className="success-text">{t('path.done')}</p>
                 ) : null}
+                {r.certificateId && (
+                  <Link to={`/certificates/${r.certificateId}`} className="btn btn--accent">
+                    <Award size={18} aria-hidden="true" />
+                    {t('certificate.view')}
+                  </Link>
+                )}
               </>
             ) : (
               <>

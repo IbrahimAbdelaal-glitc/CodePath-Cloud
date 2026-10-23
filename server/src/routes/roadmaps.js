@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { notFound } from '../lib/errors.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { computeModuleAccess, roadmapVisibilityWhere } from '../services/learning.js';
+import { issueCertificates } from '../services/certificates.js';
 
 const router = Router();
 
@@ -148,6 +149,14 @@ router.get('/:slug', optionalAuth, async (req, res) => {
   });
 
   const completed = completedSet.size;
+  let certificate = null;
+  if (userId && lessonIds.length && completed === lessonIds.length) {
+    await issueCertificates(req.user, [roadmap.id]);
+    certificate = await prisma.certificate.findUnique({
+      where: { userId_roadmapId: { userId, roadmapId: roadmap.id } },
+      select: { id: true },
+    });
+  }
   res.json({
     roadmap: {
       id: roadmap.id,
@@ -165,6 +174,7 @@ router.get('/:slug', optionalAuth, async (req, res) => {
       progress: userId
         ? { completed, total: lessonIds.length, percent: lessonIds.length ? Math.round((completed / lessonIds.length) * 100) : 0 }
         : null,
+      certificateId: certificate?.id || null,
       modules,
     },
   });

@@ -5,6 +5,7 @@ import {
   Award,
   CheckCircle2,
   Compass,
+  Download,
   Flame,
   Lock,
   PlayCircle,
@@ -22,6 +23,7 @@ const tz = new Date().getTimezoneOffset();
 export default function Dashboard() {
   const { t, fmt, dir } = useI18n();
   const { data, error, loading, reload } = useFetch(`/api/me/dashboard?tz=${tz}`);
+  const { data: certData } = useFetch('/api/me/certificates');
   const Arrow = dir === 'rtl' ? ArrowLeft : ArrowRight;
 
   if (loading) return <PageSkeleton />;
@@ -203,6 +205,37 @@ export default function Dashboard() {
             </>
           )}
         </section>
+
+        {d.user.role === 'STUDENT' && certData && (
+          <section id="certificates" className="panel panel--wide" aria-labelledby="certificates-title">
+            <h2 id="certificates-title">
+              <Award size={20} aria-hidden="true" /> {t('dashboard.certificatesTitle')}
+            </h2>
+            {certData.certificates.length === 0 ? (
+              <p className="muted">{t('dashboard.certificatesEmpty')}</p>
+            ) : (
+              <ul className="done-list cert-list">
+                {certData.certificates.map((c) => (
+                  <li key={c.id}>
+                    <div>
+                      <Link to={`/certificates/${c.id}`}>{c.roadmapTitle}</Link>
+                      <span className="muted block small">{t('dashboard.completedOn', { date: fmt.date(c.completedAt) })}</span>
+                    </div>
+                    <div className="cert-list__actions">
+                      <Link to={`/certificates/${c.id}`} className="btn btn--secondary btn--sm">
+                        {t('certificate.view')}
+                      </Link>
+                      <Link to={`/certificates/${c.id}?download=1`} className="btn btn--primary btn--sm">
+                        <Download size={15} aria-hidden="true" />
+                        {t('certificate.download')}
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         <section className="panel panel--wide" aria-labelledby="attempts-title">
           <h2 id="attempts-title">{t('dashboard.attemptsTitle')}</h2>

@@ -3,11 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
+  Award,
   Bookmark,
   BookmarkCheck,
   CheckCircle2,
   Circle,
   Clock,
+  Download,
   ExternalLink,
   FileText,
   Lightbulb,
@@ -19,7 +21,9 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useActivityHeartbeat } from '../lib/useActivityHeartbeat.js';
 import { useFetch } from '../lib/useFetch.js';
 import { DifficultyBadge } from '../components/Badges.jsx';
 import LockNotice from '../components/LockNotice.jsx';
@@ -33,9 +37,14 @@ export default function Lesson() {
   const { id } = useParams();
   const { t, fmt, dir } = useI18n();
   const toast = useToast();
+  const { user } = useAuth();
   const { data, error, loading, reload, mutate } = useFetch(`/api/lessons/${id}`);
   const [busy, setBusy] = useState(null);
   const [topics, setTopics] = useState([]);
+  const [earned, setEarned] = useState(null);
+  useActivityHeartbeat(id, Boolean(data?.lesson) && user?.role === 'STUDENT');
+
+  useEffect(() => setEarned(null), [id]);
 
   useEffect(() => {
     if (data?.lesson) setTopics(data.lesson.topics);
@@ -70,12 +79,15 @@ export default function Lesson() {
   const toggleComplete = async () => {
     setBusy('complete');
     try {
-      const { progress } = await api(`/api/lessons/${id}/progress`, {
+      const { progress, certificate } = await api(`/api/lessons/${id}/progress`, {
         method: 'PUT',
         body: { isCompleted: !lesson.isCompleted },
       });
       mutate((d) => ({ ...d, lesson: { ...d.lesson, isCompleted: progress.isCompleted } }));
-      toast.success(progress.isCompleted ? t('lesson.markedDone') : t('lesson.markedUndone'));
+      if (certificate) setEarned(certificate);
+      toast.success(
+        certificate ? t('certificate.earned') : progress.isCompleted ? t('lesson.markedDone') : t('lesson.markedUndone'),
+      );
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -171,6 +183,25 @@ export default function Lesson() {
               {lesson.isBookmarked ? t('lesson.bookmarked') : t('lesson.bookmark')}
             </button>
           </div>
+          {earned && (
+            <section className="certificate-earned" role="status" aria-labelledby="earned-title">
+              <Award size={28} aria-hidden="true" className="certificate-earned__icon" />
+              <div>
+                <h2 id="earned-title">{t('certificate.earnedTitle')}</h2>
+                <p>{t('certificate.earnedText', { title: lesson.roadmap.title })}</p>
+                <div className="certificate-earned__actions">
+                  <Link to={`/certificates/${earned.id}`} className="btn btn--primary btn--sm">
+                    <Award size={16} aria-hidden="true" />
+                    {t('certificate.view')}
+                  </Link>
+                  <Link to={`/certificates/${earned.id}?download=1`} className="btn btn--secondary btn--sm">
+                    <Download size={16} aria-hidden="true" />
+                    {t('certificate.download')}
+                  </Link>
+                </div>
+              </div>
+            </section>
+          )}
           {lesson.preview && (
             <p className="preview-note">
               <Eye size={15} aria-hidden="true" /> {t('path.staffPreview')}

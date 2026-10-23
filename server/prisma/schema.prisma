@@ -54,6 +54,8 @@ model User {
   assignedRoadmaps RoadmapInstructor[]
   createdRoadmaps  Roadmap[]            @relation("RoadmapCreator")
   resetTokens      PasswordResetToken[]
+  lessonActivity   LessonActivity[]
+  certificates     Certificate[]
 }
 
 // Single-use password reset tokens. Only a SHA-256 hash of the token is stored.
@@ -88,6 +90,7 @@ model Roadmap {
   createdBy     User?               @relation("RoadmapCreator", fields: [createdById], references: [id], onDelete: SetNull)
   modules       Module[]
   instructors   RoadmapInstructor[]
+  certificates  Certificate[]
 }
 
 // Instructor assignments: instructors manage only the paths assigned to them
@@ -148,6 +151,7 @@ model Lesson {
   progress         UserProgress[]
   bookmarks        Bookmark[]
   resources        LessonResource[]
+  activity         LessonActivity[]
 
   @@unique([moduleId, order])
 }
@@ -243,6 +247,51 @@ model UserWeakness {
   topic              Topic     @relation(fields: [topicTag], references: [tag], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([userId, topicTag])
+}
+
+// Active learning time per lesson, credited from heartbeats sent while the lesson page is visible and in use.
+// Only the gap between a user's consecutive heartbeats is credited, so idle time and parallel tabs are not counted.
+model LessonActivity {
+  id              String   @id @default(uuid())
+  userId          String
+  lessonId        String
+  activeSeconds   Int      @default(0)
+  firstActiveAt   DateTime @default(now())
+  lastHeartbeatAt DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson          Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId, lastHeartbeatAt])
+  @@index([lessonId])
+}
+
+// Issued once, when a student first completes every lesson in a path. Values are frozen at issue time.
+model Certificate {
+  id                String    @id @default(uuid())
+  userId            String
+  // Kept when the path is deleted; the title below is a snapshot
+  roadmapId         String?
+  roadmapTitle      String
+  completedAt       DateTime
+  // Percent from the latest answer to each answered question in the path; null when none was answered
+  accuracy          Int?
+  questionsAnswered Int
+  questionsTotal    Int
+  activeSeconds     Int
+  // First recorded activity in the path; null when no activity was recorded
+  timeTrackedSince  DateTime?
+  // False when quiz attempts or lesson completions in the path predate the recorded activity
+  timeFullyTracked  Boolean
+  // Random public verification code, set only while the student allows public verification.
+  // Turning sharing off clears it, which revokes the public link.
+  verificationCode  String?   @unique
+  issuedAt          DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roadmap           Roadmap?  @relation(fields: [roadmapId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roadmapId])
+  @@index([roadmapId])
 }
 
 model Bookmark {

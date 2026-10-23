@@ -6,9 +6,11 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   assertLessonAccess,
   publicQuiz,
+  recordLessonActivity,
   topicStatus,
   topicStatusMessage,
 } from '../services/learning.js';
+import { issueCertificates } from '../services/certificates.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -106,14 +108,28 @@ const progressSchema = z.object({ isCompleted: z.boolean({ error: 'Completion va
 router.put('/:id/progress', async (req, res) => {
   const { id } = idParams.parse(req.params);
   const { isCompleted } = progressSchema.parse(req.body);
-  await assertLessonAccess(req.user, id);
+  const { lesson } = await assertLessonAccess(req.user, id);
 
   const progress = await prisma.userProgress.upsert({
     where: { userId_lessonId: { userId: req.user.id, lessonId: id } },
     create: { userId: req.user.id, lessonId: id, isCompleted, completedAt: isCompleted ? new Date() : null },
     update: { isCompleted, completedAt: isCompleted ? new Date() : null },
   });
-  res.json({ progress: { lessonId: id, isCompleted: progress.isCompleted, completedAt: progress.completedAt } });
+  // Completing the last lesson of a path issues its certificate
+  const [certificate] = isCompleted ? await issueCertificates(req.user, [lesson.module.roadmap.id]) : [];
+  res.json({
+    progress: { lessonId: id, isCompleted: progress.isCompleted, completedAt: progress.completedAt },
+    certificate: certificate ? { id: certificate.id } : null,
+  });
+});
+
+// Heartbeat from the lesson page while it is visible and in use (see recordLessonActivity)
+router.post('/:id/activity', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  await assertLessonAccess(req.user, id);
+  // Only students earn certificates, so only their learning time is recorded
+  if (req.user.role === 'STUDENT') await recordLessonActivity(req.user.id, id);
+  res.status(204).end();
 });
 
 router.put('/:id/bookmark', async (req, res) => {
