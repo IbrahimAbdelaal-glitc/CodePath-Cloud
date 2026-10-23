@@ -93,7 +93,9 @@ const quizSchema = z
     explanation: text(5, 3000, 'An explanation is required so students understand the answer'),
     topicTag,
     topicName: z.string().trim().min(2).max(80).optional(),
-    points: z.coerce.number().int().min(1).max(100).default(10),
+    points: z.coerce.number().int().min(1, 'Points must be between 1 and 100').max(100, 'Points must be between 1 and 100').default(10),
+    // Position among the lesson's questions; new questions go last when omitted
+    order: z.coerce.number().int().min(1, 'Position must be 1 or more').max(1000, 'Position is too large').optional(),
   })
   .superRefine((q, ctx) => {
     if (q.questionType === 'MULTIPLE_CHOICE' && q.options.length < 2) {
@@ -174,7 +176,7 @@ router.get('/roadmaps', async (req, res) => {
     orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     include: {
       _count: { select: { modules: true } },
-      modules: { select: { _count: { select: { lessons: true } } } },
+      modules: { orderBy: { order: 'asc' }, select: { id: true, title: true, _count: { select: { lessons: true } } } },
       instructors: { select: { user: { select: { id: true, name: true, email: true } } } },
     },
   });
@@ -183,6 +185,8 @@ router.get('/roadmaps', async (req, res) => {
       ...r,
       moduleCount: _count.modules,
       lessonCount: modules.reduce((s, m) => s + m._count.lessons, 0),
+      // For choosing where a new lesson goes
+      modules: modules.map(({ id, title }) => ({ id, title })),
       instructors: instructors.map((i) => i.user),
     })),
   });
@@ -380,7 +384,10 @@ router.post('/lessons/:id/quizzes', async (req, res) => {
   const data = quizSchema.parse(req.body);
   await ensureTopic(data.topicTag, data.topicName);
   const count = await prisma.quiz.count({ where: { lessonId } });
-  const quiz = await prisma.quiz.create({ data: { ...quizData(data), lessonId, order: count + 1 }, include: { topic: true } });
+  const quiz = await prisma.quiz.create({
+    data: { ...quizData(data), lessonId, order: data.order ?? count + 1 },
+    include: { topic: true },
+  });
   res.status(201).json({ quiz });
 });
 

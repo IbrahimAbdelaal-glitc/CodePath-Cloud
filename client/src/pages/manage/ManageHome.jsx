@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FolderPlus, PenSquare, Plus, X } from 'lucide-react';
+import { FilePlus2, FolderPlus, PenSquare, Plus, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
@@ -33,10 +33,18 @@ export default function ManageHome() {
           <h1>{t('manage.homeTitle')}</h1>
           <p>{isAdmin ? t('manage.homeLeadAdmin') : t('manage.homeLeadInstructor')}</p>
         </div>
-        <button className="btn btn--primary" onClick={() => setCreating((v) => !v)} aria-expanded={creating}>
-          {creating ? <X size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
-          {creating ? t('common.cancel') : t('manage.newPath')}
-        </button>
+        <div className="row-actions">
+          {data?.roadmaps.some((r) => r.modules.length > 0) && (
+            <Link to="/manage/lessons/new" className="btn btn--secondary">
+              <FilePlus2 size={16} aria-hidden="true" />
+              {t('manage.newLesson')}
+            </Link>
+          )}
+          <button className="btn btn--primary" onClick={() => setCreating((v) => !v)} aria-expanded={creating}>
+            {creating ? <X size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
+            {creating ? t('common.cancel') : t('manage.newPath')}
+          </button>
+        </div>
       </header>
 
       {creating && (

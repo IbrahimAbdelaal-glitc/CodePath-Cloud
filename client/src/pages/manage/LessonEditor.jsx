@@ -33,6 +33,9 @@ export default function LessonEditor() {
   const navigate = useNavigate();
   const lessonReq = useFetch(isNew ? null : `/api/manage/lessons/${id}`);
   const topicsReq = useFetch('/api/manage/topics');
+  // Paths this user can manage, with their modules, to choose where a new lesson goes
+  const roadmapsReq = useFetch(isNew ? '/api/manage/roadmaps' : null);
+  const [target, setTarget] = useState({ roadmapId: '', moduleId: moduleId || '' });
   const [form, setForm] = useState(toForm(null));
   const [tab, setTab] = useState('write');
   const [error, setError] = useState(null);
@@ -44,13 +47,22 @@ export default function LessonEditor() {
     if (lesson) setForm(toForm(lesson));
   }, [lesson]);
 
-  if ((!isNew && lessonReq.loading && !lesson) || topicsReq.loading) return <PageSkeleton />;
-  if (lessonReq.error)
+  const roadmaps = roadmapsReq.data?.roadmaps;
+  useEffect(() => {
+    if (!roadmaps || !moduleId) return;
+    const owner = roadmaps.find((r) => r.modules.some((m) => m.id === moduleId));
+    if (owner) setTarget({ roadmapId: owner.id, moduleId });
+  }, [roadmaps, moduleId]);
+
+  if ((!isNew && lessonReq.loading && !lesson) || topicsReq.loading || (isNew && roadmapsReq.loading)) return <PageSkeleton />;
+  const loadError = lessonReq.error || roadmapsReq.error;
+  if (loadError)
     return (
       <div className="container page">
-        <ErrorState error={lessonReq.error} onRetry={lessonReq.reload} />
+        <ErrorState error={loadError} onRetry={lessonReq.error ? lessonReq.reload : roadmapsReq.reload} />
       </div>
     );
+  const targetRoadmap = roadmaps?.find((r) => r.id === target.roadmapId);
 
   const errs = fieldErrors(error);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -69,7 +81,11 @@ export default function LessonEditor() {
     };
     try {
       if (isNew) {
-        const { lesson: created } = await api(`/api/manage/modules/${moduleId}/lessons`, { method: 'POST', body });
+        if (!target.moduleId) {
+          setError({ message: t('manage.chooseModule'), details: [{ field: 'moduleId', message: t('manage.chooseModule') }] });
+          return;
+        }
+        const { lesson: created } = await api(`/api/manage/modules/${target.moduleId}/lessons`, { method: 'POST', body });
         toast.success(t('manage.lessonCreated'));
         navigate(`/manage/lessons/${created.id}`, { replace: true });
       } else {
@@ -88,7 +104,7 @@ export default function LessonEditor() {
   const saveQuiz = async (quiz, body) => {
     if (quiz) await api(`/api/manage/quizzes/${quiz.id}`, { method: 'PATCH', body });
     else await api(`/api/manage/lessons/${id}/quizzes`, { method: 'POST', body });
-    toast.success(t('common.savedOk'));
+    toast.success(quiz ? t('common.savedOk') : t('manage.questionAdded', { title: lesson.title }));
     setQuizEdit(null);
     lessonReq.reload();
     topicsReq.reload();
@@ -108,11 +124,11 @@ export default function LessonEditor() {
     <div className="container page">
       <nav className="crumbs" aria-label={t('common.breadcrumb')}>
         <Link to="/manage">{t('nav.manage')}</Link>
-        {lesson && (
+        {(lesson?.module.roadmap || targetRoadmap) && (
           <>
             <span aria-hidden="true">/</span>
-            <Link to={`/manage/roadmaps/${lesson.module.roadmap.id}`}>
-              {lesson.module.roadmap.title}
+            <Link to={`/manage/roadmaps/${(lesson?.module.roadmap || targetRoadmap).id}`}>
+              {(lesson?.module.roadmap || targetRoadmap).title}
             </Link>
           </>
         )}
@@ -128,6 +144,44 @@ export default function LessonEditor() {
 
       <form className="panel form-grid" onSubmit={save} noValidate>
         {error && <Alert>{error.message}</Alert>}
+        {isNew && (
+          <div className="field field--full field--split">
+            <div>
+              <label htmlFor="l-path">{t('manage.lessonPath')}</label>
+              <select
+                id="l-path"
+                className="input"
+                value={target.roadmapId}
+                onChange={(e) => setTarget({ roadmapId: e.target.value, moduleId: '' })}
+              >
+                <option value="">{t('manage.choosePath')}</option>
+                {roadmaps.map((r) => (
+                  <option key={r.id} value={r.id} disabled={!r.modules.length}>
+                    {r.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="l-module">{t('manage.lessonModule')}</label>
+              <select
+                id="l-module"
+                className="input"
+                value={target.moduleId}
+                disabled={!targetRoadmap}
+                onChange={(e) => setTarget((x) => ({ ...x, moduleId: e.target.value }))}
+              >
+                <option value="">{t('manage.chooseModule')}</option>
+                {(targetRoadmap?.modules || []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.title}
+                  </option>
+                ))}
+              </select>
+              <FieldError errors={errs} name="moduleId" />
+            </div>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="l-title">{t('manage.lessonTitle')}</label>
           <input id="l-title" className="input" value={form.title} onChange={set('title')} />
@@ -147,11 +201,13 @@ export default function LessonEditor() {
           <div>
             <label htmlFor="l-min">{t('manage.minutes')}</label>
             <input id="l-min" type="number" min="1" className="input" value={form.estimatedMinutes} onChange={set('estimatedMinutes')} />
+            <FieldError errors={errs} name="estimatedMinutes" />
           </div>
         </div>
         <div className="field field--full">
           <label htmlFor="l-sum">{t('manage.summary')}</label>
           <input id="l-sum" className="input" value={form.summary} onChange={set('summary')} />
+          <FieldError errors={errs} name="summary" />
         </div>
         <div className="field field--full">
           <div className="tabs" role="tablist" aria-label={t('manage.content')}>
@@ -181,6 +237,7 @@ export default function LessonEditor() {
           <label htmlFor="l-take">{t('lesson.takeaways')}</label>
           <textarea id="l-take" className="input" rows={4} value={form.keyTakeaways} onChange={set('keyTakeaways')} />
           <span className="hint">{t('manage.onePerLine')}</span>
+          <FieldError errors={errs} name="keyTakeaways" />
         </div>
 
         <fieldset className="field field--full">
@@ -229,7 +286,13 @@ export default function LessonEditor() {
             )}
           </div>
           {quizEdit === 'new' && (
-            <QuizForm topics={topics} submitLabel={t('manage.addQuestion')} onCancel={() => setQuizEdit(null)} onSubmit={(body) => saveQuiz(null, body)} />
+            <QuizForm
+              topics={topics}
+              defaultOrder={lesson.quizzes.length + 1}
+              submitLabel={t('manage.addQuestion')}
+              onCancel={() => setQuizEdit(null)}
+              onSubmit={(body) => saveQuiz(null, body)}
+            />
           )}
           {lesson.quizzes.length === 0 && quizEdit !== 'new' && <p className="muted">{t('manage.noQuestions')}</p>}
           <ol className="manage-quizzes">

@@ -7,7 +7,7 @@ import { FieldError, fieldErrors } from './RoadmapForm.jsx';
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 // Create/edit question form. Only editors see the correct answer (the server checks permissions)
-export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLabel }) {
+export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLabel, defaultOrder }) {
   const { t } = useI18n();
   const [form, setForm] = useState({
     question: initial?.question || '',
@@ -20,6 +20,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
     topicTag: initial?.topicTag || topics[0]?.tag || '',
     topicName: '',
     points: initial?.points ?? 10,
+    order: initial?.order || defaultOrder || '',
   });
   const [newTopic, setNewTopic] = useState(topics.length === 0);
   const [error, setError] = useState(null);
@@ -46,6 +47,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
         topicTag: form.topicTag.trim(),
         ...(newTopic && form.topicName && { topicName: form.topicName.trim() }),
         points: Number(form.points) || 10,
+        ...(form.order !== '' && { order: Number(form.order) }),
       });
     } catch (err) {
       setError(err);
@@ -69,6 +71,13 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
       <div className="field">
         <label htmlFor={`qp-${uid}`}>{t('manage.points')}</label>
         <input id={`qp-${uid}`} type="number" min="1" max="100" className="input" value={form.points} onChange={set('points')} />
+        <FieldError errors={errs} name="points" />
+      </div>
+      <div className="field">
+        <label htmlFor={`qn-${uid}`}>{t('manage.questionOrder')}</label>
+        <input id={`qn-${uid}`} type="number" min="1" className="input" value={form.order} onChange={set('order')} />
+        <span className="hint">{t('manage.questionOrderHint')}</span>
+        <FieldError errors={errs} name="order" />
       </div>
       <div className="field field--full">
         <label htmlFor={`qq-${uid}`}>{t('manage.questionText')}</label>
@@ -116,6 +125,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
           <label htmlFor={`qx-${uid}`}>{t('manage.acceptedAnswers')}</label>
           <textarea id={`qx-${uid}`} className="input input--code" dir="ltr" rows={2} value={form.acceptedAnswers} onChange={set('acceptedAnswers')} />
           <span className="hint">{t('manage.acceptedHint')}</span>
+          <FieldError errors={errs} name="acceptedAnswers" />
         </div>
       )}
       <div className="field field--full">
@@ -145,6 +155,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
             <div className="field">
               <label htmlFor={`tn-${uid}`}>{t('manage.topicName')}</label>
               <input id={`tn-${uid}`} className="input" value={form.topicName} onChange={set('topicName')} />
+              <FieldError errors={errs} name="topicName" />
             </div>
           </div>
         ) : (

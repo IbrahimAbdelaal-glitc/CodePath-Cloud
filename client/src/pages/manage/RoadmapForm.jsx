@@ -12,8 +12,10 @@ export function fieldErrors(err) {
   return map;
 }
 
+// Also shows errors for items of list fields (e.g. "keyTakeaways.2")
 export function FieldError({ errors, name }) {
-  return errors[name] ? <span className="field-error">{errors[name]}</span> : null;
+  const message = errors[name] || Object.entries(errors).find(([k]) => k.startsWith(`${name}.`))?.[1];
+  return message ? <span className="field-error">{message}</span> : null;
 }
 
 export default function RoadmapForm({ initial, onSubmit, submitLabel }) {

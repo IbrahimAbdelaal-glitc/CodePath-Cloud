@@ -49,6 +49,7 @@ export default function App() {
           <Route element={<RequireAuth roles={['INSTRUCTOR', 'ADMIN']} />}>
             <Route path="manage" element={<ManageHome />} />
             <Route path="manage/roadmaps/:id" element={<ManageRoadmap />} />
+            <Route path="manage/lessons/new" element={<LessonEditor />} />
             <Route path="manage/lessons/:id" element={<LessonEditor />} />
             <Route path="manage/modules/:moduleId/lessons/new" element={<LessonEditor />} />
           </Route>
