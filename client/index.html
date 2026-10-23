@@ -5,6 +5,76 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="CodePath Cloud — learn programming through structured paths, interactive quizzes and progress analytics." />
     <meta name="theme-color" content="#0b5d4b" />
+    <script>
+      // Theme (Auto, Light or Dark). Runs before the page is drawn so the right theme shows from the first frame.
+      // Auto follows the visitor's local time. Change the switch times here (24-hour "HH:MM").
+      (function () {
+        var LIGHT_FROM = '07:00';
+        var DARK_FROM = '19:00';
+        var KEY = 'codepath.theme';
+        var MODES = ['auto', 'light', 'dark'];
+
+        var toMinutes = function (hhmm) {
+          var p = hhmm.split(':');
+          return Number(p[0]) * 60 + Number(p[1]);
+        };
+        var lightFrom = toMinutes(LIGHT_FROM);
+        var darkFrom = toMinutes(DARK_FROM);
+
+        function getMode() {
+          try {
+            var saved = localStorage.getItem(KEY);
+            return MODES.indexOf(saved) >= 0 ? saved : 'auto';
+          } catch (e) {
+            return 'auto';
+          }
+        }
+        function resolve(mode, now) {
+          if (mode === 'light' || mode === 'dark') return mode;
+          var d = now || new Date();
+          var m = d.getHours() * 60 + d.getMinutes();
+          var isDay = lightFrom < darkFrom ? m >= lightFrom && m < darkFrom : m >= lightFrom || m < darkFrom;
+          return isDay ? 'light' : 'dark';
+        }
+        // Milliseconds until Auto next switches theme
+        function msUntilNextSwitch(now) {
+          var d = now || new Date();
+          var best = Infinity;
+          [lightFrom, darkFrom].forEach(function (mins) {
+            var t = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(mins / 60), mins % 60, 0, 0);
+            if (t <= d) t.setDate(t.getDate() + 1);
+            best = Math.min(best, t - d);
+          });
+          return best;
+        }
+        function apply(mode) {
+          var theme = resolve(mode);
+          document.documentElement.setAttribute('data-theme', theme);
+          return theme;
+        }
+        function setMode(mode) {
+          if (MODES.indexOf(mode) < 0) return;
+          try {
+            localStorage.setItem(KEY, mode);
+          } catch (e) {
+            /* storage unavailable: the choice lasts for this page only */
+          }
+          return apply(mode);
+        }
+
+        window.codepathTheme = {
+          KEY: KEY,
+          LIGHT_FROM: LIGHT_FROM,
+          DARK_FROM: DARK_FROM,
+          getMode: getMode,
+          setMode: setMode,
+          resolve: resolve,
+          apply: apply,
+          msUntilNextSwitch: msUntilNextSwitch,
+        };
+        apply(getMode());
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

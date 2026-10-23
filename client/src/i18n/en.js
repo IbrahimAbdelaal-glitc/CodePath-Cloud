@@ -47,6 +47,13 @@ export default {
     openMenu: 'Open menu',
     closeMenu: 'Close menu',
   },
+  theme: {
+    label: 'Theme',
+    auto: 'Auto',
+    light: 'Light',
+    dark: 'Dark',
+    autoHint: 'Auto: light from {from} to {to} your local time, dark otherwise (now {current})',
+  },
   footer: {
     tagline: 'Structured learning paths, interactive quizzes and progress analytics to help you master programming with confidence.',
     links: 'Footer links',

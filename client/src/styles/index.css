@@ -49,36 +49,35 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1513;
-    --surface: #131e1b;
-    --surface-2: #1a2723;
-    --surface-3: #22322d;
-    --ink: #eaf1ee;
-    --ink-2: #c5d2cd;
-    --muted: #93a39d;
-    --line: #26352f;
-    --line-strong: #34463f;
-    --brand: #1f9a7d;
-    --brand-2: #34b593;
-    --brand-soft: #143a31;
-    --accent: #f2b544;
-    --accent-soft: #3a2f16;
-    --success: #4cc38a;
-    --success-soft: #133325;
-    --danger: #f2756a;
-    --danger-soft: #3a1a17;
-    --warning: #f0bf5a;
-    --warning-soft: #33290f;
-    --info-soft: #182540;
-    --ring-track: #24332e;
-    --focus: #7cb3ff;
-    --hero-from: #06231d;
-    --hero-to: #0b3f34;
-    --shadow: 0 2px 6px rgb(0 0 0 / 25%), 0 10px 24px -12px rgb(0 0 0 / 50%);
-    color-scheme: dark;
-  }
+/* Dark theme: set on <html> by the theme script in index.html (Auto, Light or Dark) */
+:root[data-theme='dark'] {
+  --bg: #0d1513;
+  --surface: #131e1b;
+  --surface-2: #1a2723;
+  --surface-3: #22322d;
+  --ink: #eaf1ee;
+  --ink-2: #c5d2cd;
+  --muted: #93a39d;
+  --line: #26352f;
+  --line-strong: #34463f;
+  --brand: #1f9a7d;
+  --brand-2: #34b593;
+  --brand-soft: #143a31;
+  --accent: #f2b544;
+  --accent-soft: #3a2f16;
+  --success: #4cc38a;
+  --success-soft: #133325;
+  --danger: #f2756a;
+  --danger-soft: #3a1a17;
+  --warning: #f0bf5a;
+  --warning-soft: #33290f;
+  --info-soft: #182540;
+  --ring-track: #24332e;
+  --focus: #7cb3ff;
+  --hero-from: #06231d;
+  --hero-to: #0b3f34;
+  --shadow: 0 2px 6px rgb(0 0 0 / 25%), 0 10px 24px -12px rgb(0 0 0 / 50%);
+  color-scheme: dark;
 }
 
 *,
@@ -305,6 +304,48 @@ main:focus {
   color: var(--muted);
   font-weight: 500;
 }
+/* Theme control: Auto / Light / Dark segmented radio group */
+.theme-control {
+  display: inline-flex;
+  margin: 0;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.theme-control__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.theme-control__option:hover {
+  color: var(--ink);
+}
+.theme-control__option:has(input:checked) {
+  background: var(--surface);
+  color: var(--brand);
+  box-shadow: var(--shadow-sm);
+}
+.theme-control__option:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+/* Icons only in the desktop header; names stay available to screen readers */
+.theme-control__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .menu-toggle {
   display: none;
   margin-inline-start: auto;
@@ -343,6 +384,19 @@ main:focus {
     padding-top: 12px;
     border-top: 1px solid var(--line);
     flex-wrap: wrap;
+  }
+  .theme-control {
+    width: 100%;
+  }
+  .theme-control__option {
+    flex: 1;
+    justify-content: center;
+  }
+  .theme-control__text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
   }
 }
 
