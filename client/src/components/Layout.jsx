@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Award,
   BookMarked,
   Compass,
   GraduationCap,
@@ -28,6 +29,8 @@ function NavItems({ onNavigate }) {
           { to: '/bookmarks', label: t('nav.bookmarks'), icon: BookMarked },
         ]
       : []),
+    // Only students earn certificates
+    ...(user?.role === 'STUDENT' ? [{ to: '/certificates', label: t('nav.certificates'), icon: Award }] : []),
     ...(isStaff ? [{ to: '/manage', label: t('nav.manage'), icon: PenSquare }] : []),
     ...(isAdmin ? [{ to: '/admin/users', label: t('nav.users'), icon: Users }] : []),
   ];

@@ -9,6 +9,7 @@ import PathDetail from './pages/PathDetail.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Bookmarks from './pages/Bookmarks.jsx';
 import Profile from './pages/Profile.jsx';
+import Certificates from './pages/Certificates.jsx';
 import { Login, Register } from './pages/Auth.jsx';
 import { ForgotPassword, ResetPassword } from './pages/PasswordReset.jsx';
 import NotFound from './pages/NotFound.jsx';
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="bookmarks" element={<Bookmarks />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="certificates" element={<Certificates />} />
             <Route path="certificates/:id" element={<Certificate />} />
           </Route>
 

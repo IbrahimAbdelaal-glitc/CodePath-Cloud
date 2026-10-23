@@ -37,6 +37,7 @@ export default {
     paths: 'Paths',
     dashboard: 'My dashboard',
     bookmarks: 'Saved',
+    certificates: 'Certificates',
     manage: 'Content',
     users: 'Users',
     profile: 'Profile',
@@ -235,6 +236,11 @@ export default {
     certificatesTitle: 'Your certificates',
     certificatesEmpty: 'Complete every lesson in a path to earn its certificate.',
     completedOn: 'Completed {date}',
+  },
+  certificates: {
+    title: 'Your certificates',
+    lead: 'Certificates you earned by completing learning paths. Open one to view, download or share it.',
+    emptyTitle: 'No certificates yet',
   },
   certificate: {
     earned: 'Path complete! Your certificate is ready',
