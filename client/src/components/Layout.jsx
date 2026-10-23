@@ -73,7 +73,7 @@ export default function Layout() {
           <Link to="/" className="brand" aria-label={t('nav.homeLabel')}>
             <Logo />
             <span className="brand-name" dir="ltr">
-              CodePath <span>Cloud</span>
+              CodePath
             </span>
           </Link>
 
