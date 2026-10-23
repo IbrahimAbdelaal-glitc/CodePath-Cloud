@@ -1,5 +1,6 @@
 // Content management for instructors and admins.
-// ADMIN manages every path; INSTRUCTOR manages only the paths assigned to them.
+// ADMIN manages every path. Any INSTRUCTOR can view every path here and add lessons and questions to it;
+// editing, reordering and deleting existing content is limited to the paths assigned to them.
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -12,13 +13,22 @@ const router = Router();
 router.use(requireAuth, requireRole('INSTRUCTOR', 'ADMIN'));
 
 // ── Path-level permission checks ─────────────────────────────
-async function assertCanManage(user, roadmapId) {
-  if (!roadmapId) throw notFound();
-  if (user.role === 'ADMIN') return;
+async function canEdit(user, roadmapId) {
+  if (user.role === 'ADMIN') return true;
   const assigned = await prisma.roadmapInstructor.findUnique({
     where: { roadmapId_userId: { roadmapId, userId: user.id } },
   });
-  if (!assigned) throw forbidden('This path is not assigned to you, so you cannot edit its content');
+  return Boolean(assigned);
+}
+
+async function assertCanManage(user, roadmapId) {
+  if (!roadmapId) throw notFound();
+  if (!(await canEdit(user, roadmapId))) throw forbidden('This path is not assigned to you, so you cannot edit its content');
+}
+
+// Viewing and adding lessons/questions: any admin or instructor (the router already requires one of these roles)
+function assertCanAddContent(user, roadmapId) {
+  if (!roadmapId) throw notFound();
 }
 
 async function roadmapOfModule(moduleId) {
@@ -170,9 +180,7 @@ const moveSchema = z.object({ direction: z.enum(['up', 'down'], { error: 'Invali
 
 // ── Paths ─────────────────────────────────────────────────────────
 router.get('/roadmaps', async (req, res) => {
-  const where = req.user.role === 'ADMIN' ? {} : { instructors: { some: { userId: req.user.id } } };
   const roadmaps = await prisma.roadmap.findMany({
-    where,
     orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     include: {
       _count: { select: { modules: true } },
@@ -188,6 +196,7 @@ router.get('/roadmaps', async (req, res) => {
       // For choosing where a new lesson goes
       modules: modules.map(({ id, title }) => ({ id, title })),
       instructors: instructors.map((i) => i.user),
+      canEdit: req.user.role === 'ADMIN' || instructors.some((i) => i.user.id === req.user.id),
     })),
   });
 });
@@ -208,7 +217,7 @@ router.post('/roadmaps', async (req, res) => {
 
 router.get('/roadmaps/:id', async (req, res) => {
   const { id } = idParams.parse(req.params);
-  await assertCanManage(req.user, id);
+  assertCanAddContent(req.user, id);
   const roadmap = await prisma.roadmap.findUnique({
     where: { id },
     include: {
@@ -229,6 +238,7 @@ router.get('/roadmaps/:id', async (req, res) => {
   res.json({
     roadmap: {
       ...roadmap,
+      canEdit: await canEdit(req.user, id),
       instructors: roadmap.instructors.map((i) => i.user),
       modules: roadmap.modules.map((m) => ({
         ...m,
@@ -314,7 +324,7 @@ router.delete('/modules/:id', async (req, res) => {
 // ── Lessons ───────────────────────────────────────────────────────────
 router.post('/modules/:id/lessons', async (req, res) => {
   const { id: moduleId } = idParams.parse(req.params);
-  await assertCanManage(req.user, await roadmapOfModule(moduleId));
+  assertCanAddContent(req.user, await roadmapOfModule(moduleId));
   const { resources = [], ...data } = lessonSchema.parse(req.body);
   const last = await prisma.lesson.findFirst({ where: { moduleId }, orderBy: { order: 'desc' } });
   const lesson = await prisma.lesson.create({
@@ -330,7 +340,8 @@ router.post('/modules/:id/lessons', async (req, res) => {
 
 router.get('/lessons/:id', async (req, res) => {
   const { id } = idParams.parse(req.params);
-  await assertCanManage(req.user, await roadmapOfLesson(id));
+  const roadmapId = await roadmapOfLesson(id);
+  assertCanAddContent(req.user, roadmapId);
   const lesson = await prisma.lesson.findUnique({
     where: { id },
     include: {
@@ -339,7 +350,7 @@ router.get('/lessons/:id', async (req, res) => {
       module: { select: { id: true, title: true, roadmap: { select: { id: true, title: true, slug: true } } } },
     },
   });
-  res.json({ lesson });
+  res.json({ lesson: { ...lesson, canEdit: await canEdit(req.user, roadmapId) } });
 });
 
 router.patch('/lessons/:id', async (req, res) => {
@@ -380,7 +391,7 @@ function quizData(q) {
 
 router.post('/lessons/:id/quizzes', async (req, res) => {
   const { id: lessonId } = idParams.parse(req.params);
-  await assertCanManage(req.user, await roadmapOfLesson(lessonId));
+  assertCanAddContent(req.user, await roadmapOfLesson(lessonId));
   const data = quizSchema.parse(req.body);
   await ensureTopic(data.topicTag, data.topicName);
   const count = await prisma.quiz.count({ where: { lessonId } });

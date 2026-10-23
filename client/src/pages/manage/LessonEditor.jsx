@@ -142,136 +142,140 @@ export default function LessonEditor() {
         )}
       </header>
 
-      <form className="panel form-grid" onSubmit={save} noValidate>
-        {error && <Alert>{error.message}</Alert>}
-        {isNew && (
-          <div className="field field--full field--split">
-            <div>
-              <label htmlFor="l-path">{t('manage.lessonPath')}</label>
-              <select
-                id="l-path"
-                className="input"
-                value={target.roadmapId}
-                onChange={(e) => setTarget({ roadmapId: e.target.value, moduleId: '' })}
-              >
-                <option value="">{t('manage.choosePath')}</option>
-                {roadmaps.map((r) => (
-                  <option key={r.id} value={r.id} disabled={!r.modules.length}>
-                    {r.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="l-module">{t('manage.lessonModule')}</label>
-              <select
-                id="l-module"
-                className="input"
-                value={target.moduleId}
-                disabled={!targetRoadmap}
-                onChange={(e) => setTarget((x) => ({ ...x, moduleId: e.target.value }))}
-              >
-                <option value="">{t('manage.chooseModule')}</option>
-                {(targetRoadmap?.modules || []).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title}
-                  </option>
-                ))}
-              </select>
-              <FieldError errors={errs} name="moduleId" />
-            </div>
-          </div>
-        )}
-        <div className="field">
-          <label htmlFor="l-title">{t('manage.lessonTitle')}</label>
-          <input id="l-title" className="input" value={form.title} onChange={set('title')} />
-          <FieldError errors={errs} name="title" />
-        </div>
-        <div className="field field--split">
-          <div>
-            <label htmlFor="l-diff">{t('manage.difficulty')}</label>
-            <select id="l-diff" className="input" value={form.difficulty} onChange={set('difficulty')}>
-              {['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].map((d) => (
-                <option key={d} value={d}>
-                  {t(`difficulty.${d}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="l-min">{t('manage.minutes')}</label>
-            <input id="l-min" type="number" min="1" className="input" value={form.estimatedMinutes} onChange={set('estimatedMinutes')} />
-            <FieldError errors={errs} name="estimatedMinutes" />
-          </div>
-        </div>
-        <div className="field field--full">
-          <label htmlFor="l-sum">{t('manage.summary')}</label>
-          <input id="l-sum" className="input" value={form.summary} onChange={set('summary')} />
-          <FieldError errors={errs} name="summary" />
-        </div>
-        <div className="field field--full">
-          <div className="tabs" role="tablist" aria-label={t('manage.content')}>
-            <button type="button" role="tab" aria-selected={tab === 'write'} onClick={() => setTab('write')}>
-              <PenSquare size={14} aria-hidden="true" /> {t('manage.write')}
-            </button>
-            <button type="button" role="tab" aria-selected={tab === 'preview'} onClick={() => setTab('preview')}>
-              <Eye size={14} aria-hidden="true" /> {t('manage.preview')}
-            </button>
-          </div>
-          {tab === 'write' ? (
-            <>
-              <label htmlFor="l-content" className="sr-only">
-                {t('manage.content')}
-              </label>
-              <textarea id="l-content" className="input input--editor" rows={18} value={form.content} onChange={set('content')} />
-              <span className="hint">{t('manage.markdownHint')}</span>
-            </>
-          ) : (
-            <div className="preview-box">
-              <Markdown>{form.content}</Markdown>
+      {!isNew && !lesson.canEdit ? (
+        <Alert type="info">{t('manage.addOnlyLesson')}</Alert>
+      ) : (
+        <form className="panel form-grid" onSubmit={save} noValidate>
+          {error && <Alert>{error.message}</Alert>}
+          {isNew && (
+            <div className="field field--full field--split">
+              <div>
+                <label htmlFor="l-path">{t('manage.lessonPath')}</label>
+                <select
+                  id="l-path"
+                  className="input"
+                  value={target.roadmapId}
+                  onChange={(e) => setTarget({ roadmapId: e.target.value, moduleId: '' })}
+                >
+                  <option value="">{t('manage.choosePath')}</option>
+                  {roadmaps.map((r) => (
+                    <option key={r.id} value={r.id} disabled={!r.modules.length}>
+                      {r.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="l-module">{t('manage.lessonModule')}</label>
+                <select
+                  id="l-module"
+                  className="input"
+                  value={target.moduleId}
+                  disabled={!targetRoadmap}
+                  onChange={(e) => setTarget((x) => ({ ...x, moduleId: e.target.value }))}
+                >
+                  <option value="">{t('manage.chooseModule')}</option>
+                  {(targetRoadmap?.modules || []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title}
+                    </option>
+                  ))}
+                </select>
+                <FieldError errors={errs} name="moduleId" />
+              </div>
             </div>
           )}
-          <FieldError errors={errs} name="content" />
-        </div>
-        <div className="field field--full">
-          <label htmlFor="l-take">{t('lesson.takeaways')}</label>
-          <textarea id="l-take" className="input" rows={4} value={form.keyTakeaways} onChange={set('keyTakeaways')} />
-          <span className="hint">{t('manage.onePerLine')}</span>
-          <FieldError errors={errs} name="keyTakeaways" />
-        </div>
-
-        <fieldset className="field field--full">
-          <legend>{t('lesson.resources')}</legend>
-          {form.resources.map((r, i) => (
-            <div key={i} className="resource-row">
-              <input className="input" aria-label={t('manage.resourceTitle')} placeholder={t('manage.resourceTitle')} value={r.title} onChange={(e) => setResource(i, 'title', e.target.value)} />
-              <input className="input" dir="ltr" aria-label={t('manage.resourceUrl')} placeholder="https://" value={r.url} onChange={(e) => setResource(i, 'url', e.target.value)} />
-              <select className="input" aria-label={t('manage.resourceType')} value={r.type} onChange={(e) => setResource(i, 'type', e.target.value)}>
-                {['ARTICLE', 'VIDEO', 'DOCUMENTATION'].map((x) => (
-                  <option key={x} value={x}>
-                    {t(`resourceType.${x}`)}
+          <div className="field">
+            <label htmlFor="l-title">{t('manage.lessonTitle')}</label>
+            <input id="l-title" className="input" value={form.title} onChange={set('title')} />
+            <FieldError errors={errs} name="title" />
+          </div>
+          <div className="field field--split">
+            <div>
+              <label htmlFor="l-diff">{t('manage.difficulty')}</label>
+              <select id="l-diff" className="input" value={form.difficulty} onChange={set('difficulty')}>
+                {['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].map((d) => (
+                  <option key={d} value={d}>
+                    {t(`difficulty.${d}`)}
                   </option>
                 ))}
               </select>
-              <button type="button" className="icon-btn icon-btn--danger" aria-label={t('common.delete')} onClick={() => setForm((f) => ({ ...f, resources: f.resources.filter((_, j) => j !== i) }))}>
-                <X size={16} />
+            </div>
+            <div>
+              <label htmlFor="l-min">{t('manage.minutes')}</label>
+              <input id="l-min" type="number" min="1" className="input" value={form.estimatedMinutes} onChange={set('estimatedMinutes')} />
+              <FieldError errors={errs} name="estimatedMinutes" />
+            </div>
+          </div>
+          <div className="field field--full">
+            <label htmlFor="l-sum">{t('manage.summary')}</label>
+            <input id="l-sum" className="input" value={form.summary} onChange={set('summary')} />
+            <FieldError errors={errs} name="summary" />
+          </div>
+          <div className="field field--full">
+            <div className="tabs" role="tablist" aria-label={t('manage.content')}>
+              <button type="button" role="tab" aria-selected={tab === 'write'} onClick={() => setTab('write')}>
+                <PenSquare size={14} aria-hidden="true" /> {t('manage.write')}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === 'preview'} onClick={() => setTab('preview')}>
+                <Eye size={14} aria-hidden="true" /> {t('manage.preview')}
               </button>
             </div>
-          ))}
-          {Object.keys(errs).some((k) => k.startsWith('resources')) && (
-            <span className="field-error">{Object.entries(errs).find(([k]) => k.startsWith('resources'))[1]}</span>
-          )}
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => setForm((f) => ({ ...f, resources: [...f.resources, { ...emptyResource }] }))}>
-            <Plus size={15} aria-hidden="true" /> {t('manage.addResource')}
-          </button>
-        </fieldset>
+            {tab === 'write' ? (
+              <>
+                <label htmlFor="l-content" className="sr-only">
+                  {t('manage.content')}
+                </label>
+                <textarea id="l-content" className="input input--editor" rows={18} value={form.content} onChange={set('content')} />
+                <span className="hint">{t('manage.markdownHint')}</span>
+              </>
+            ) : (
+              <div className="preview-box">
+                <Markdown>{form.content}</Markdown>
+              </div>
+            )}
+            <FieldError errors={errs} name="content" />
+          </div>
+          <div className="field field--full">
+            <label htmlFor="l-take">{t('lesson.takeaways')}</label>
+            <textarea id="l-take" className="input" rows={4} value={form.keyTakeaways} onChange={set('keyTakeaways')} />
+            <span className="hint">{t('manage.onePerLine')}</span>
+            <FieldError errors={errs} name="keyTakeaways" />
+          </div>
 
-        <div className="field--full">
-          <button className="btn btn--primary" disabled={saving}>
-            <Save size={16} aria-hidden="true" /> {saving ? t('common.saving') : isNew ? t('manage.createLesson') : t('common.save')}
-          </button>
-        </div>
-      </form>
+          <fieldset className="field field--full">
+            <legend>{t('lesson.resources')}</legend>
+            {form.resources.map((r, i) => (
+              <div key={i} className="resource-row">
+                <input className="input" aria-label={t('manage.resourceTitle')} placeholder={t('manage.resourceTitle')} value={r.title} onChange={(e) => setResource(i, 'title', e.target.value)} />
+                <input className="input" dir="ltr" aria-label={t('manage.resourceUrl')} placeholder="https://" value={r.url} onChange={(e) => setResource(i, 'url', e.target.value)} />
+                <select className="input" aria-label={t('manage.resourceType')} value={r.type} onChange={(e) => setResource(i, 'type', e.target.value)}>
+                  {['ARTICLE', 'VIDEO', 'DOCUMENTATION'].map((x) => (
+                    <option key={x} value={x}>
+                      {t(`resourceType.${x}`)}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="icon-btn icon-btn--danger" aria-label={t('common.delete')} onClick={() => setForm((f) => ({ ...f, resources: f.resources.filter((_, j) => j !== i) }))}>
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+            {Object.keys(errs).some((k) => k.startsWith('resources')) && (
+              <span className="field-error">{Object.entries(errs).find(([k]) => k.startsWith('resources'))[1]}</span>
+            )}
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setForm((f) => ({ ...f, resources: [...f.resources, { ...emptyResource }] }))}>
+              <Plus size={15} aria-hidden="true" /> {t('manage.addResource')}
+            </button>
+          </fieldset>
+
+          <div className="field--full">
+            <button className="btn btn--primary" disabled={saving}>
+              <Save size={16} aria-hidden="true" /> {saving ? t('common.saving') : isNew ? t('manage.createLesson') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      )}
 
       {!isNew && (
         <section className="panel" aria-labelledby="quizzes-h">
@@ -310,14 +314,16 @@ export default function LessonEditor() {
                         {t('manage.correctAnswer')}: <code className="inline-code" dir="ltr">{q.correctAnswer}</code>
                       </small>
                     </div>
-                    <div className="row-actions">
-                      <button className="icon-btn" aria-label={t('common.edit')} onClick={() => setQuizEdit(q.id)}>
-                        <PenSquare size={16} />
-                      </button>
-                      <button className="icon-btn icon-btn--danger" aria-label={t('common.delete')} onClick={() => deleteQuiz(q)}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {lesson.canEdit && (
+                      <div className="row-actions">
+                        <button className="icon-btn" aria-label={t('common.edit')} onClick={() => setQuizEdit(q.id)}>
+                          <PenSquare size={16} />
+                        </button>
+                        <button className="icon-btn icon-btn--danger" aria-label={t('common.delete')} onClick={() => deleteQuiz(q)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </li>

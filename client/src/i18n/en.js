@@ -361,7 +361,12 @@ export default {
   manage: {
     homeTitle: 'Content management',
     homeLeadAdmin: 'As an admin you can manage every path and assign instructors to them.',
-    homeLeadInstructor: 'Paths assigned to you. You can add and edit modules, lessons and questions.',
+    homeLeadInstructor:
+      'You can add lessons and questions to any path. In paths assigned to you, you can also edit and delete modules, lessons and questions.',
+    addOnlyPath:
+      'This path is not assigned to you. You can add lessons and questions to its modules; only admins and its assigned instructors can edit or delete existing content.',
+    addOnlyLesson:
+      'This lesson is in a path not assigned to you. You can add questions below; only admins and the path’s assigned instructors can edit the lesson or its existing questions.',
     newPath: 'New path',
     createPath: 'Create path',
     pathCreated: 'Path created',

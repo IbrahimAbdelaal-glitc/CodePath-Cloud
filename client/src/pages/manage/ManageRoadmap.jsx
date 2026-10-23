@@ -214,22 +214,28 @@ export default function ManageRoadmap() {
         </div>
       </header>
 
-      <details className="panel">
-        <summary>
-          <h2>{t('manage.pathDetails')}</h2>
-        </summary>
-        <RoadmapForm key={r.updatedAt} initial={r} onSubmit={saveDetails} submitLabel={t('common.save')} />
-      </details>
+      {r.canEdit ? (
+        <details className="panel">
+          <summary>
+            <h2>{t('manage.pathDetails')}</h2>
+          </summary>
+          <RoadmapForm key={r.updatedAt} initial={r} onSubmit={saveDetails} submitLabel={t('common.save')} />
+        </details>
+      ) : (
+        <Alert type="info">{t('manage.addOnlyPath')}</Alert>
+      )}
 
       {isAdmin && <InstructorAssign roadmap={r} onSaved={reload} />}
 
       <section className="panel" aria-labelledby="modules-h">
         <div className="panel__head">
           <h2 id="modules-h">{t('manage.modules')}</h2>
-          <button className="btn btn--primary btn--sm" onClick={() => setAddingModule((v) => !v)} aria-expanded={addingModule}>
-            {addingModule ? <X size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-            {addingModule ? t('common.cancel') : t('manage.addModule')}
-          </button>
+          {r.canEdit && (
+            <button className="btn btn--primary btn--sm" onClick={() => setAddingModule((v) => !v)} aria-expanded={addingModule}>
+              {addingModule ? <X size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+              {addingModule ? t('common.cancel') : t('manage.addModule')}
+            </button>
+          )}
         </div>
         {addingModule && (
           <ModuleForm
@@ -275,27 +281,29 @@ export default function ManageRoadmap() {
                           .join(t('common.listSep'))}`}
                     </div>
                   </div>
-                  <div className="row-actions">
-                    <button className="icon-btn" aria-label={t('manage.moveUp')} disabled={mi === 0} onClick={() => run(() => api(`/api/manage/modules/${m.id}/move`, { method: 'POST', body: { direction: 'up' } }))}>
-                      <ArrowUp size={16} />
-                    </button>
-                    <button className="icon-btn" aria-label={t('manage.moveDown')} disabled={mi === r.modules.length - 1} onClick={() => run(() => api(`/api/manage/modules/${m.id}/move`, { method: 'POST', body: { direction: 'down' } }))}>
-                      <ArrowDown size={16} />
-                    </button>
-                    <button className="icon-btn" aria-label={t('common.edit')} onClick={() => setEditing(m.id)}>
-                      <PenSquare size={16} />
-                    </button>
-                    <button
-                      className="icon-btn icon-btn--danger"
-                      aria-label={t('common.delete')}
-                      onClick={() =>
-                        window.confirm(t('manage.confirmDeleteModule', { title: m.title })) &&
-                        run(() => api(`/api/manage/modules/${m.id}`, { method: 'DELETE' }), t('manage.deleted'))
-                      }
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  {r.canEdit && (
+                    <div className="row-actions">
+                      <button className="icon-btn" aria-label={t('manage.moveUp')} disabled={mi === 0} onClick={() => run(() => api(`/api/manage/modules/${m.id}/move`, { method: 'POST', body: { direction: 'up' } }))}>
+                        <ArrowUp size={16} />
+                      </button>
+                      <button className="icon-btn" aria-label={t('manage.moveDown')} disabled={mi === r.modules.length - 1} onClick={() => run(() => api(`/api/manage/modules/${m.id}/move`, { method: 'POST', body: { direction: 'down' } }))}>
+                        <ArrowDown size={16} />
+                      </button>
+                      <button className="icon-btn" aria-label={t('common.edit')} onClick={() => setEditing(m.id)}>
+                        <PenSquare size={16} />
+                      </button>
+                      <button
+                        className="icon-btn icon-btn--danger"
+                        aria-label={t('common.delete')}
+                        onClick={() =>
+                          window.confirm(t('manage.confirmDeleteModule', { title: m.title })) &&
+                          run(() => api(`/api/manage/modules/${m.id}`, { method: 'DELETE' }), t('manage.deleted'))
+                        }
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -305,25 +313,35 @@ export default function ManageRoadmap() {
                     <span>{l.title}</span>
                     <span className="small muted">{fmt.count('questions', l.quizCount)}</span>
                     <div className="row-actions">
-                      <button className="icon-btn icon-btn--sm" aria-label={t('manage.moveUp')} disabled={li === 0} onClick={() => run(() => api(`/api/manage/lessons/${l.id}/move`, { method: 'POST', body: { direction: 'up' } }))}>
-                        <ArrowUp size={14} />
-                      </button>
-                      <button className="icon-btn icon-btn--sm" aria-label={t('manage.moveDown')} disabled={li === m.lessons.length - 1} onClick={() => run(() => api(`/api/manage/lessons/${l.id}/move`, { method: 'POST', body: { direction: 'down' } }))}>
-                        <ArrowDown size={14} />
-                      </button>
-                      <Link to={`/manage/lessons/${l.id}`} className="icon-btn icon-btn--sm" aria-label={t('common.edit')}>
-                        <PenSquare size={14} />
-                      </Link>
-                      <button
-                        className="icon-btn icon-btn--sm icon-btn--danger"
-                        aria-label={t('common.delete')}
-                        onClick={() =>
-                          window.confirm(t('manage.confirmDeleteLesson', { title: l.title })) &&
-                          run(() => api(`/api/manage/lessons/${l.id}`, { method: 'DELETE' }), t('manage.deleted'))
-                        }
+                      {r.canEdit && (
+                        <>
+                          <button className="icon-btn icon-btn--sm" aria-label={t('manage.moveUp')} disabled={li === 0} onClick={() => run(() => api(`/api/manage/lessons/${l.id}/move`, { method: 'POST', body: { direction: 'up' } }))}>
+                            <ArrowUp size={14} />
+                          </button>
+                          <button className="icon-btn icon-btn--sm" aria-label={t('manage.moveDown')} disabled={li === m.lessons.length - 1} onClick={() => run(() => api(`/api/manage/lessons/${l.id}/move`, { method: 'POST', body: { direction: 'down' } }))}>
+                            <ArrowDown size={14} />
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        to={`/manage/lessons/${l.id}`}
+                        className="icon-btn icon-btn--sm"
+                        aria-label={r.canEdit ? t('common.edit') : t('manage.addQuestion')}
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        {r.canEdit ? <PenSquare size={14} /> : <Plus size={14} />}
+                      </Link>
+                      {r.canEdit && (
+                        <button
+                          className="icon-btn icon-btn--sm icon-btn--danger"
+                          aria-label={t('common.delete')}
+                          onClick={() =>
+                            window.confirm(t('manage.confirmDeleteLesson', { title: l.title })) &&
+                            run(() => api(`/api/manage/lessons/${l.id}`, { method: 'DELETE' }), t('manage.deleted'))
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
