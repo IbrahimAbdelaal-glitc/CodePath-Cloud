@@ -25,10 +25,11 @@ services:
       # Public web app URL used in password reset links
       - key: APP_URL
         sync: false
-      # Email: Render's free plan blocks SMTP ports, so use an HTTPS email API (Resend or Brevo)
-      - key: RESEND_API_KEY
+      # Email: Render's free plan blocks SMTP ports, so email goes over HTTPS through the
+      # Google Apps Script relay (server/apps-script/README.md)
+      - key: MAIL_APPS_SCRIPT_URL
         sync: false
-      - key: MAIL_FROM
+      - key: MAIL_APPS_SCRIPT_SECRET
         sync: false
       # Video uploads: S3-compatible storage (Neon Object Storage, Cloudflare R2, AWS S3)
       - key: STORAGE_ENDPOINT

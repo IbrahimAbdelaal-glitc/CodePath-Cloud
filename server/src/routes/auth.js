@@ -184,7 +184,8 @@ router.post('/forgot-password', resetRequestLimiter, async (req, res) => {
       const link = `${config.appUrl}/reset-password#token=${token}`;
       const { text, html } = resetEmail(user.name, link);
       // Not awaited, so the response time does not reveal whether the account exists
-      sendMail({ to: user.email, subject: 'Reset your CodePath Cloud password', text, html }).catch((err) =>
+      const template = { kind: 'password-reset', name: user.name, link, minutes: config.resetTokenMinutes };
+      sendMail({ to: user.email, subject: 'Reset your CodePath Cloud password', text, html, template }).catch((err) =>
         console.error('Password reset email failed:', err.message),
       );
     }

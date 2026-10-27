@@ -41,6 +41,9 @@ export const config = {
   appUrl,
   resetTokenMinutes: Number(process.env.RESET_TOKEN_MINUTES) || 30,
   mail: {
+    // Google Apps Script relay (server/apps-script): sends from a Gmail account over HTTPS, no domain needed
+    appsScriptUrl: process.env.MAIL_APPS_SCRIPT_URL || '',
+    appsScriptSecret: process.env.MAIL_APPS_SCRIPT_SECRET || '',
     // HTTPS email APIs. Preferred on hosts that block outbound SMTP ports (Render's free plan does).
     resendApiKey: process.env.RESEND_API_KEY || '',
     brevoApiKey: process.env.BREVO_API_KEY || '',

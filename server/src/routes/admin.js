@@ -160,6 +160,7 @@ router.post('/system/test-email', testMailLimiter, async (req, res) => {
       subject: 'CodePath Cloud test email',
       text: 'This is a test email from CodePath Cloud. Email delivery is working.',
       html: '<p>This is a test email from <strong>CodePath Cloud</strong>. Email delivery is working.</p>',
+      template: { kind: 'test' },
     });
     res.json({ sent: true, to: req.user.email, mode: mailMode });
   } catch (err) {
