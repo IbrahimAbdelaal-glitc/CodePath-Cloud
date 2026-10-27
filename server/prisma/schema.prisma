@@ -504,3 +504,11 @@ model CatalogLock {
   owner       String
   lockedUntil DateTime
 }
+
+// A named catalog release that has been applied (see CATALOG_RELEASE in src/catalog/index.js). Each release
+// runs once; the summary records what changed and the learner data counts before and after.
+model CatalogRelease {
+  id        String   @id
+  appliedAt DateTime @default(now())
+  summary   Json
+}

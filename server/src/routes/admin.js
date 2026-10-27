@@ -185,6 +185,11 @@ router.post('/catalog/sync', catalogSyncLimiter, async (req, res) => {
   z.object({ confirm: z.literal(true, { error: 'Confirm the catalog update' }) }).parse(req.body);
   const plan = await catalogPlan();
   if (!plan.pending) return res.json({ status: 'up-to-date', steps: plan.steps });
+  if (plan.removals.withHistory > 0) {
+    throw badRequest(`This update would remove ${plan.removals.withHistory} item(s) with learner history, so it was not applied.`, {
+      code: 'CATALOG_HISTORY',
+    });
+  }
   console.log(`[catalog] sync started by admin ${req.user.id}`);
   const outcome = await applyCatalogSync();
   if (outcome.status === 'busy') {

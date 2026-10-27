@@ -16,6 +16,7 @@ import NotFound from './pages/NotFound.jsx';
 
 // Heavier pages (Markdown, syntax highlighting, admin tools) load on demand
 const Lesson = lazy(() => import('./pages/Lesson.jsx'));
+const RoadmapPrint = lazy(() => import('./pages/RoadmapPrint.jsx'));
 const Certificate = lazy(() => import('./pages/Certificate.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 const ManageHome = lazy(() => import('./pages/manage/ManageHome.jsx'));
@@ -34,6 +35,7 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="paths" element={<Paths />} />
           <Route path="paths/:slug" element={<PathDetail />} />
+          <Route path="paths/:slug/print" element={<RoadmapPrint />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
           <Route path="forgot-password" element={<ForgotPassword />} />

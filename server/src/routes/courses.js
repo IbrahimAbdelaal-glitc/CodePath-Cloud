@@ -7,6 +7,7 @@ import { idParams, uuid } from '../lib/validation.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { computeModuleAccess, roadmapVisibilityWhere } from '../services/learning.js';
 import { issueCertificates } from '../services/certificates.js';
+import { renderRoadmapPdf, roadmapHandout } from '../services/roadmapHandout.js';
 import {
   MAX_TEST_OUT_ATTEMPTS,
   blockQuizOverview,
@@ -19,6 +20,33 @@ import {
 } from '../services/coursePlayer.js';
 
 const router = Router();
+
+// Downloadable roadmap (public): JSON for the print page, and a PDF built from the same data. The PDF is cached per
+// roadmap version (updatedAt), so it is regenerated whenever the roadmap changes.
+const pdfCache = new Map();
+
+router.get('/:slug/handout', async (req, res) => {
+  const handout = await roadmapHandout(String(req.params.slug));
+  if (!handout) throw notFound('Roadmap not found');
+  res.json({ handout });
+});
+
+router.get('/:slug/roadmap.pdf', async (req, res) => {
+  const handout = await roadmapHandout(String(req.params.slug));
+  if (!handout) throw notFound('Roadmap not found');
+  const stamp = handout.updatedAt.toISOString();
+  let cached = pdfCache.get(handout.slug);
+  if (!cached || cached.stamp !== stamp) {
+    cached = { stamp, pdf: await renderRoadmapPdf(handout) };
+    pdfCache.set(handout.slug, cached);
+  }
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="${handout.slug}-roadmap.pdf"`,
+    'Cache-Control': 'public, max-age=300',
+  });
+  res.send(cached.pdf);
+});
 
 // Lesson states: LOCKED, AVAILABLE, IN_PROGRESS, COMPLETED. Quiz states: LOCKED, AVAILABLE, FAILED, PASSED.
 // A module the student skipped with a skip test keeps its lessons open for review, and they no longer count as required.

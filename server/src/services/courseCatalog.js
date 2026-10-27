@@ -1,11 +1,11 @@
-// Built-in course catalog (src/catalog). Each course has a key and a version. When an operator runs the sync (CLI or admin System page; never on start-up), a course that is missing
+// Built-in course catalog (src/catalog). Each course has a key and a version. When a sync runs (a named release once at start-up, the admin System page, or the CLI), a course that is missing
 // is created, and a course whose stored catalogVersion is lower than the code's version is updated in place:
 // items are matched by catalogKey, so student progress on unchanged lessons is kept. Content that instructors add
 // themselves (no catalogKey) is never touched. Uploaded videos and instructor review decisions are preserved.
 // Catalog courses use an 80% pass mark for in-video questions and block quizzes unless a course says otherwise.
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
-import courses from '../catalog/index.js';
+import courses, { CATALOG_RELEASE } from '../catalog/index.js';
 
 const CHOICE_TYPES = new Set(['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT']);
 
@@ -246,6 +246,58 @@ export async function learnerCounts() {
   return { users, progress, quizAttempts, blockAttempts, videoProgress, certificates, bookmarks, activity };
 }
 
+// The catalog keys a sync keeps, built exactly as syncCourse, syncModule and syncLesson build them
+function expectedKeys(course) {
+  const keys = { module: new Set(), lesson: new Set(), quiz: new Set() };
+  for (const m of course.modules) {
+    keys.module.add(`${course.key}:${m.key}`);
+    for (const l of m.lessons) {
+      const lessonKey = `${course.key}:${l.key}`;
+      keys.lesson.add(lessonKey);
+      (l.checkpoints || []).forEach((c, i) => keys.quiz.add(`${lessonKey}:${c.key ?? `c${i + 1}`}`));
+    }
+  }
+  return keys;
+}
+
+// What a sync would delete because the catalog no longer lists it, and how much of that has learner history.
+// Deleting a module, lesson or question deletes the progress, attempts and bookmarks attached to it (cascade),
+// so a release refuses to run when withHistory is above zero.
+export async function catalogRemovals() {
+  const out = { modules: 0, lessons: 0, questions: 0, withHistory: 0 };
+  const stored = await prisma.roadmap.findMany({
+    where: { catalogKey: { in: courses.map((c) => c.key) } },
+    select: { catalogKey: true, catalogVersion: true },
+  });
+  const pending = courses.filter((c) => {
+    const r = stored.find((s) => s.catalogKey === c.key);
+    return r && (r.catalogVersion ?? 0) < c.version; // only courses a sync would update can lose items
+  });
+  for (const course of pending) {
+    const keys = expectedKeys(course);
+    const lessonHistory = {
+      OR: [{ progress: { some: {} } }, { videoProgress: { some: {} } }, { bookmarks: { some: {} } }, { activity: { some: {} } }, { quizzes: { some: { attempts: { some: {} } } } }],
+    };
+    const [mods, lessons, quizzes] = await Promise.all([
+      prisma.module.findMany({ where: { catalogKey: { startsWith: `${course.key}:`, notIn: [...keys.module] } }, select: { id: true } }),
+      prisma.lesson.findMany({ where: { catalogKey: { startsWith: `${course.key}:`, notIn: [...keys.lesson] } }, select: { id: true } }),
+      prisma.quiz.findMany({ where: { catalogKey: { startsWith: `${course.key}:`, notIn: [...keys.quiz] } }, select: { id: true } }),
+    ]);
+    out.modules += mods.length;
+    out.lessons += lessons.length;
+    out.questions += quizzes.length;
+    const [modHistory, lessonHist, quizHist] = await Promise.all([
+      mods.length
+        ? prisma.module.count({ where: { id: { in: mods.map((m) => m.id) }, OR: [{ blockAttempts: { some: {} } }, { lessons: { some: lessonHistory } }] } })
+        : 0,
+      lessons.length ? prisma.lesson.count({ where: { id: { in: lessons.map((l) => l.id) }, ...lessonHistory } }) : 0,
+      quizzes.length ? prisma.quiz.count({ where: { id: { in: quizzes.map((q) => q.id) }, attempts: { some: {} } } }) : 0,
+    ]);
+    out.withHistory += modHistory + lessonHist + quizHist;
+  }
+  return out;
+}
+
 // Dry run: what a sync would do to each catalog course, plus the state of the archived paths. Writes nothing.
 export async function catalogPlan() {
   const stored = await prisma.roadmap.findMany({
@@ -265,6 +317,7 @@ export async function catalogPlan() {
   });
   return {
     steps,
+    removals: await catalogRemovals(),
     pending: steps.some((s) => s.action !== 'up-to-date'),
     archivedPaths: archived.map((r) => ({
       slug: r.slug,
@@ -277,6 +330,29 @@ export async function catalogPlan() {
   };
 }
 
+// Applies CATALOG_RELEASE once. Called at start-up: when the release is already recorded this is one indexed read.
+// Otherwise it refuses if the sync would remove anything with learner history, syncs under the lease (a second
+// instance starting at the same time skips), checks learner counts did not drop, and records the release.
+// If the process dies part-way, nothing is recorded and the next start-up finishes the (idempotent) sync.
+export async function applyPendingCatalogRelease({ log = console.log } = {}) {
+  if (await prisma.catalogRelease.findUnique({ where: { id: CATALOG_RELEASE }, select: { id: true } })) return { status: 'already-applied' };
+  const removals = await catalogRemovals();
+  if (removals.withHistory > 0) {
+    log(`[catalog] release ${CATALOG_RELEASE} NOT applied: it would remove ${removals.withHistory} item(s) with learner history`);
+    return { status: 'refused', removals };
+  }
+  const outcome = await applyCatalogSync({ log });
+  if (outcome.status === 'busy') {
+    log(`[catalog] release ${CATALOG_RELEASE}: another instance is applying it`);
+    return outcome;
+  }
+  if (outcome.lost.length) log(`[catalog] release ${CATALOG_RELEASE}: learner data decreased: ${outcome.lost.join(', ')}`);
+  const summary = { results: outcome.results, before: outcome.before, after: outcome.after, lost: outcome.lost, removals };
+  await prisma.catalogRelease.upsert({ where: { id: CATALOG_RELEASE }, create: { id: CATALOG_RELEASE, summary }, update: {} });
+  log(`[catalog] release ${CATALOG_RELEASE} applied; learner data ${outcome.lost.length ? 'DECREASED' : 'unchanged'}`);
+  return { status: 'applied', ...summary };
+}
+
 // Runs the sync and proves no learner rows were lost. Returns { status: 'busy' | 'synced', results, before, after, lost }.
 export async function applyCatalogSync({ log = console.log } = {}) {
   const before = await learnerCounts();
@@ -287,7 +363,7 @@ export async function applyCatalogSync({ log = console.log } = {}) {
   return { status: 'synced', results, before, after, lost };
 }
 
-// Runs only on purpose: from scripts/sync-catalog.js or the admin System page, never on start-up or deploy.
+// Runs from applyPendingCatalogRelease (once per named release), the admin System page or scripts/sync-catalog.js.
 // Two runs could overlap (two operators, or a retry), so the sync takes a lease row first
 // (a session advisory lock is not used because pooled connections cannot guarantee lock and unlock share a session).
 // The lease expires on its own if a run dies mid-sync. Unique catalog keys still prevent duplicates.

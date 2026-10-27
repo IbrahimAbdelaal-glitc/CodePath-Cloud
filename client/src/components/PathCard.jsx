@@ -1,19 +1,16 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, BrainCircuit, Clock, Layers, Monitor, Server, Terminal } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Layers, ShieldCheck } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { DifficultyBadge, ProgressBar } from './Badges.jsx';
 
-const icons = { frontend: Monitor, 'dotnet-backend': Server, 'python-backend': Terminal, 'ai-fullstack': BrainCircuit };
-
 export default function PathCard({ path }) {
   const { t, fmt, dir } = useI18n();
-  const Icon = icons[path.slug] || Layers;
   const Arrow = dir === 'rtl' ? ArrowLeft : ArrowRight;
   return (
     <article className="path-card">
       <div className="path-card__top">
         <span className="path-card__icon" aria-hidden="true">
-          <Icon size={24} />
+          <ShieldCheck size={24} />
         </span>
         <span className="path-card__category">
           {path.category}

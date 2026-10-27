@@ -3,6 +3,7 @@ import { SearchX, Search } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { useFetch } from '../lib/useFetch.js';
 import PathCard from '../components/PathCard.jsx';
+import RoadmapFeature from '../components/RoadmapFeature.jsx';
 import { EmptyState, ErrorState, PageSkeleton } from '../components/States.jsx';
 
 const levels = ['ALL', 'BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
@@ -22,6 +23,11 @@ export default function Paths() {
     );
   }, [data, query, level]);
 
+  // Staged roadmaps are featured above the search; while searching or filtering they appear in the results instead
+  const browsing = !query.trim() && level === 'ALL';
+  const roadmaps = browsing ? (data?.roadmaps || []).filter((r) => r.stages) : [];
+  const cards = filtered.filter((r) => !roadmaps.includes(r));
+
   if (loading) return <PageSkeleton />;
 
   return (
@@ -30,6 +36,10 @@ export default function Paths() {
         <h1>{t('paths.title')}</h1>
         <p>{t('paths.lead')}</p>
       </header>
+
+      {roadmaps.map((r) => (
+        <RoadmapFeature key={r.id} path={r} />
+      ))}
 
       <div className="toolbar" role="search">
         <label className="search">
@@ -60,7 +70,7 @@ export default function Paths() {
         </EmptyState>
       ) : (
         <div className="grid grid--cards">
-          {filtered.map((p) => (
+          {cards.map((p) => (
             <PathCard key={p.id} path={p} />
           ))}
         </div>

@@ -1,6 +1,9 @@
 // Shared HTTP client for the CodePath Cloud API.
 // VITE_API_URL: API origin in production (e.g. https://codepath-api.onrender.com). Leave empty locally to use the Vite proxy.
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+// Absolute address of an API resource the browser opens directly (for example a PDF download)
+export const apiUrl = (path) => `${BASE_URL}${path}`;
 const TOKEN_KEY = 'codepath.token';
 
 

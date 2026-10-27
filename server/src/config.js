@@ -40,6 +40,8 @@ export const config = {
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 12,
   appUrl,
   resetTokenMinutes: Number(process.env.RESET_TOKEN_MINUTES) || 30,
+  // Apply the code's named catalog release once at start-up (src/catalog/index.js). "false" leaves it to an admin.
+  applyCatalogRelease: process.env.CATALOG_AUTO_RELEASE !== 'false',
   mail: {
     // Google Apps Script relay (server/apps-script): sends from a Gmail account over HTTPS, no domain needed
     appsScriptUrl: process.env.MAIL_APPS_SCRIPT_URL || '',

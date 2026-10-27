@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { ProgressBar } from './Badges.jsx';
+import RoadmapDownload from './RoadmapDownload.jsx';
 import { useReducedMotion } from '../lib/useReducedMotion.js';
 
 // The cybersecurity roadmap drawn as a winding road. Built only from the course outline API (/api/courses/:slug/outline),
@@ -107,6 +108,7 @@ export default function RoadmapMap({ course, signedIn }) {
         <p className="muted">
           {signedIn ? t('map.summary', { done: fmt.number(stagesDone), total: fmt.number(stageCount) }) : t('map.signedOut')}
         </p>
+        <RoadmapDownload slug={course.slug} />
         <ul className="road-map__legend" aria-label={t('map.legend')}>
           {['done', 'current', 'open', 'locked'].map((s) => (
             <li key={s} className={`is-${s}`}>

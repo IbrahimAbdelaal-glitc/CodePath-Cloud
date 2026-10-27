@@ -1005,3 +1005,205 @@ a.outline__item:hover {
     grid-column: 1;
   }
 }
+
+/* ── Roadmap download, featured roadmap and print page ── */
+.roadmap-download {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.roadmap-feature {
+  margin-bottom: 24px;
+  border-color: var(--line-strong);
+  background: linear-gradient(160deg, var(--surface-2), var(--surface));
+}
+.roadmap-feature .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.roadmap-feature h2 {
+  margin: 4px 0 6px;
+}
+.roadmap-feature h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+.roadmap-feature h2 a:hover {
+  text-decoration: underline;
+}
+.roadmap-feature__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.roadmap-feature__actions .roadmap-download {
+  margin: 0;
+}
+
+/* Stages as numbered circles on one line (a column on phones) */
+.mini-route {
+  --node: 40px;
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+.mini-route__stop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 0 6px;
+}
+.mini-route__stop::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--node) / 2 - 2px);
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--brand);
+  box-shadow: 0 0 6px rgb(25 229 122 / 45%);
+}
+.mini-route__stop:first-child::before {
+  left: 50%;
+}
+.mini-route__stop:last-child::before {
+  right: 50%;
+}
+.mini-route__node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--node);
+  height: var(--node);
+  border-radius: 50%;
+  border: 3px solid var(--brand);
+  background: var(--bg);
+  color: var(--brand-2);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.mini-route__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (max-width: 640px) {
+  .mini-route {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    gap: 14px;
+  }
+  .mini-route__stop {
+    flex-direction: row;
+    text-align: left;
+    padding: 0;
+  }
+  .mini-route__stop::before {
+    top: 0;
+    bottom: -14px;
+    left: calc(var(--node) / 2 - 2px);
+    right: auto;
+    width: 4px;
+    height: auto;
+  }
+  .mini-route__stop:first-child::before {
+    left: calc(var(--node) / 2 - 2px);
+    top: 50%;
+  }
+  .mini-route__stop:last-child::before {
+    right: auto;
+    bottom: 50%;
+  }
+}
+
+.print-doc {
+  max-width: 860px;
+}
+.print-doc__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.print-doc__stage {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-strong);
+}
+.print-doc__stage h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.print-doc__num {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-family: var(--font-display);
+  flex-shrink: 0;
+}
+.print-doc__credit {
+  display: block;
+}
+.print-doc li {
+  margin-bottom: 4px;
+}
+
+/* Paper: black on white, no site chrome or animation, stages start on a new page */
+@media print {
+  :root {
+    color-scheme: light;
+  }
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .site-header,
+  .site-footer,
+  .matrix-rain,
+  .skip-link,
+  .print-doc__toolbar {
+    display: none !important;
+  }
+  .print-doc,
+  .print-doc * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .print-doc a {
+    color: #0645ad !important;
+    text-decoration: underline;
+  }
+  .print-doc .print-doc__num,
+  .print-doc .mini-route__node {
+    border: 2px solid #0b6b45 !important;
+  }
+  .print-doc .mini-route__stop::before {
+    background: #0b6b45 !important;
+    box-shadow: none;
+  }
+  .print-doc__stage {
+    break-before: page;
+    border-top: 0;
+  }
+  .print-doc h2,
+  .print-doc h3 {
+    break-after: avoid;
+  }
+}

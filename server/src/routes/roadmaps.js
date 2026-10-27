@@ -50,7 +50,16 @@ router.get('/', optionalAuth, async (req, res) => {
     include: {
       modules: {
         orderBy: { order: 'asc' },
-        select: { id: true, difficulty: true, estimatedMinutes: true, lessons: { select: { id: true, estimatedMinutes: true } } },
+        select: {
+          id: true,
+          title: true,
+          difficulty: true,
+          estimatedMinutes: true,
+          timeEstimate: true,
+          learningOutcomes: true,
+          linkedRoadmapIds: true,
+          lessons: { select: { id: true, estimatedMinutes: true } },
+        },
       },
     },
   });
@@ -69,6 +78,8 @@ router.get('/', optionalAuth, async (req, res) => {
     roadmaps: roadmaps.map((r) => {
       const lessonIds = r.modules.flatMap((m) => m.lessons.map((l) => l.id));
       const completed = lessonIds.filter((id) => completedSet.has(id)).length;
+      // A roadmap is a path made of stages (modules with outcomes or linked courses); the catalog shows it as a route
+      const stageModules = r.modules.filter((m) => m.learningOutcomes.length || m.linkedRoadmapIds.length);
       return {
         id: r.id,
         title: r.title,
@@ -84,6 +95,7 @@ router.get('/', optionalAuth, async (req, res) => {
         moduleCount: r.modules.length,
         lessonCount: lessonIds.length,
         estimatedMinutes: sumMinutes(r.modules),
+        stages: stageModules.length > 1 ? stageModules.map((m) => ({ title: m.title, time: m.timeEstimate })) : null,
         progress: req.user
           ? { completed, total: lessonIds.length, percent: lessonIds.length ? Math.round((completed / lessonIds.length) * 100) : 0 }
           : null,

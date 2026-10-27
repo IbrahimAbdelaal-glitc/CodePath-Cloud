@@ -21,6 +21,10 @@ router.use(requireAuth);
 
 const DAY = 24 * 60 * 60 * 1000;
 
+// Paths retired from the catalog are unpublished, never deleted, so learner history stays in the database.
+// Student-facing lists only show content from active (published) paths.
+const ACTIVE_LESSON = { module: { roadmap: { isPublished: true } } };
+
 function dayKey(date, tzOffsetMinutes) {
   return new Date(date.getTime() - tzOffsetMinutes * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -68,7 +72,8 @@ async function weakTopicsFor(userId) {
     orderBy: { accuracy: 'asc' },
   });
   const lessonsByTag = await lessonsForTopics(weaknesses.map((w) => w.topicTag));
-  return weaknesses.map((w) => {
+  // A topic with no lessons left in an active path came from a retired one; there is nothing to review
+  return weaknesses.filter((w) => lessonsByTag.get(w.topicTag)?.length).map((w) => {
     const status = topicStatus(w);
     return {
       tag: w.topicTag,
@@ -123,13 +128,13 @@ router.get('/dashboard', async (req, res) => {
             select: {
               id: true,
               title: true,
-              module: { select: { title: true, roadmap: { select: { title: true, slug: true } } } },
+              module: { select: { title: true, roadmap: { select: { title: true, slug: true, isPublished: true } } } },
             },
           },
         },
       }),
       prisma.quizAttempt.findMany({
-        where: { userId },
+        where: { userId, quiz: { lesson: ACTIVE_LESSON } },
         orderBy: { createdAt: 'desc' },
         take: 8,
         select: {
@@ -148,13 +153,13 @@ router.get('/dashboard', async (req, res) => {
           },
         },
       }),
-      prisma.quizAttempt.groupBy({ by: ['isCorrect'], where: { userId }, _count: true, _sum: { score: true } }),
+      prisma.quizAttempt.groupBy({ by: ['isCorrect'], where: { userId, quiz: { lesson: ACTIVE_LESSON } }, _count: true, _sum: { score: true } }),
       prisma.quizAttempt.findMany({
         where: { userId, createdAt: { gte: new Date(Date.now() - 400 * DAY) } },
         select: { createdAt: true },
       }),
       prisma.quizAttempt.findMany({
-        where: { userId },
+        where: { userId, quiz: { lesson: ACTIVE_LESSON } },
         orderBy: { createdAt: 'desc' },
         take: 1000,
         select: { quizId: true, isCorrect: true, quiz: { select: { topic: { select: { tag: true, name: true } } } } },
@@ -162,7 +167,8 @@ router.get('/dashboard', async (req, res) => {
       weakTopicsFor(userId),
     ]);
 
-  const completedSet = new Set(completedProgress.map((p) => p.lesson.id));
+  const activeCompleted = completedProgress.filter((p) => p.lesson.module.roadmap.isPublished);
+  const completedSet = new Set(activeCompleted.map((p) => p.lesson.id));
 
   // Progress per path
   const paths = roadmaps.map((r) => {
@@ -238,7 +244,7 @@ router.get('/dashboard', async (req, res) => {
         percent: totalLessons ? Math.round((completedSet.size / totalLessons) * 100) : 0,
       },
       paths: paths.map(({ lessons, ...p }) => p),
-      completedLessons: completedProgress.slice(0, 6).map((p) => ({
+      completedLessons: activeCompleted.slice(0, 6).map((p) => ({
         id: p.lesson.id,
         title: p.lesson.title,
         moduleTitle: p.lesson.module.title,
@@ -273,7 +279,7 @@ router.get('/dashboard', async (req, res) => {
 
 router.get('/bookmarks', async (req, res) => {
   const bookmarks = await prisma.bookmark.findMany({
-    where: { userId: req.user.id },
+    where: { userId: req.user.id, lesson: ACTIVE_LESSON },
     orderBy: { createdAt: 'desc' },
     select: {
       createdAt: true,
