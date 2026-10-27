@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Eye, PenSquare, Plus, Save, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Eye, Flag, PenSquare, Plus, Save, Trash2, Upload, Video, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { useI18n } from '../../i18n/I18nContext.jsx';
@@ -9,8 +9,10 @@ import Markdown from '../../components/Markdown.jsx';
 import { Alert, ErrorState, PageSkeleton } from '../../components/States.jsx';
 import { FieldError, fieldErrors } from './RoadmapForm.jsx';
 import QuizForm from './QuizForm.jsx';
+import VideoUploadDialog from '../../components/VideoUploadDialog.jsx';
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+const num = (v) => (v === '' || v == null ? null : Number(v));
 const emptyResource = { title: '', url: '', type: 'ARTICLE' };
 
 function toForm(lesson) {
@@ -22,6 +24,12 @@ function toForm(lesson) {
     difficulty: lesson?.difficulty || 'BEGINNER',
     estimatedMinutes: lesson?.estimatedMinutes || '',
     resources: (lesson?.resources || []).map(({ title, url, type }) => ({ title, url, type })),
+    youtubeId: lesson?.youtubeId || '',
+    videoStart: lesson?.videoStart ?? '',
+    videoEnd: lesson?.videoEnd ?? '',
+    videoDurationSeconds: lesson?.videoDurationSeconds ?? '',
+    videoCredit: lesson?.videoCredit || '',
+    videoSourceUrl: lesson?.videoSourceUrl || '',
   };
 }
 
@@ -41,6 +49,7 @@ export default function LessonEditor() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [quizEdit, setQuizEdit] = useState(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const lesson = lessonReq.data?.lesson;
   useEffect(() => {
@@ -78,7 +87,15 @@ export default function LessonEditor() {
       keyTakeaways: lines(form.keyTakeaways),
       estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : null,
       resources: form.resources.filter((r) => r.title || r.url),
+      videoStart: num(form.videoStart),
+      videoEnd: num(form.videoEnd),
+      videoDurationSeconds: num(form.videoDurationSeconds),
+      videoCredit: form.videoCredit.trim() || null,
+      videoSourceUrl: form.videoSourceUrl.trim() || null,
     };
+    // A YouTube id switches the lesson to YouTube; an uploaded file stays active while the field is empty
+    if (form.youtubeId.trim()) body.youtubeId = form.youtubeId.trim();
+    else if (lesson?.videoProvider !== 'UPLOAD') body.youtubeId = null;
     try {
       if (isNew) {
         if (!target.moduleId) {
@@ -108,6 +125,25 @@ export default function LessonEditor() {
     setQuizEdit(null);
     lessonReq.reload();
     topicsReq.reload();
+  };
+  const toggleReview = async (quiz) => {
+    try {
+      await api(`/api/manage/quizzes/${quiz.id}/review`, { method: 'PATCH', body: { needsReview: !quiz.needsReview } });
+      toast.success(quiz.needsReview ? t('manage.markedReviewed') : t('manage.markedForReview'));
+      lessonReq.reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+  const removeUpload = async () => {
+    if (!window.confirm(t('upload.confirmRemove'))) return;
+    try {
+      await api(`/api/manage/lessons/${id}/video-upload`, { method: 'DELETE' });
+      toast.success(t('upload.removed'));
+      lessonReq.reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
   };
   const deleteQuiz = async (quiz) => {
     if (!window.confirm(t('manage.confirmDeleteQuiz'))) return;
@@ -243,6 +279,60 @@ export default function LessonEditor() {
             <FieldError errors={errs} name="keyTakeaways" />
           </div>
 
+          <fieldset className="field field--full video-fields">
+            <legend>
+              <Video size={16} aria-hidden="true" /> {t('manage.video')}
+            </legend>
+            {lesson?.videoProvider === 'UPLOAD' && lesson.videoAsset ? (
+              <p className="upload-file">
+                <CheckCircle2 size={16} aria-hidden="true" /> {t('manage.uploadedVideo', { name: lesson.videoAsset.originalName })}{' '}
+                <button type="button" className="btn btn--ghost btn--sm" onClick={removeUpload}>
+                  <Trash2 size={14} aria-hidden="true" /> {t('upload.remove')}
+                </button>
+              </p>
+            ) : (
+              <span className="hint">{t('manage.videoHint')}</span>
+            )}
+            {!isNew && (
+              <p>
+                <button type="button" className="btn btn--secondary btn--sm" onClick={() => setUploadOpen(true)}>
+                  <Upload size={15} aria-hidden="true" /> {t('upload.button')}
+                </button>
+              </p>
+            )}
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="l-yt">{t('manage.youtubeId')}</label>
+                <input id="l-yt" className="input" dir="ltr" placeholder="https://www.youtube.com/watch?v=…" value={form.youtubeId} onChange={set('youtubeId')} />
+                <FieldError errors={errs} name="youtubeId" />
+              </div>
+              <div className="field">
+                <label htmlFor="l-vdur">{t('manage.videoDuration')}</label>
+                <input id="l-vdur" type="number" min="1" className="input" value={form.videoDurationSeconds} onChange={set('videoDurationSeconds')} />
+                <FieldError errors={errs} name="videoDurationSeconds" />
+              </div>
+              <div className="field">
+                <label htmlFor="l-vs">{t('manage.videoStart')}</label>
+                <input id="l-vs" type="number" min="0" className="input" value={form.videoStart} onChange={set('videoStart')} />
+                <FieldError errors={errs} name="videoStart" />
+              </div>
+              <div className="field">
+                <label htmlFor="l-ve">{t('manage.videoEnd')}</label>
+                <input id="l-ve" type="number" min="1" className="input" value={form.videoEnd} onChange={set('videoEnd')} />
+                <FieldError errors={errs} name="videoEnd" />
+              </div>
+              <div className="field">
+                <label htmlFor="l-vc">{t('manage.videoCredit')}</label>
+                <input id="l-vc" className="input" value={form.videoCredit} onChange={set('videoCredit')} />
+              </div>
+              <div className="field">
+                <label htmlFor="l-vu">{t('manage.videoSourceUrl')}</label>
+                <input id="l-vu" className="input" dir="ltr" placeholder="https://" value={form.videoSourceUrl} onChange={set('videoSourceUrl')} />
+                <FieldError errors={errs} name="videoSourceUrl" />
+              </div>
+            </div>
+          </fieldset>
+
           <fieldset className="field field--full">
             <legend>{t('lesson.resources')}</legend>
             {form.resources.map((r, i) => (
@@ -308,14 +398,24 @@ export default function LessonEditor() {
                   <div className="manage-quiz">
                     <div>
                       <span className={`chip chip--${q.questionType.toLowerCase()}`}>{t(`questionType.${q.questionType}`)}</span>{' '}
-                      <span className="chip chip--topic">{q.topic.name}</span>
+                      <span className="chip chip--topic">{q.topic.name}</span>{' '}
+                      {q.placement === 'CHECKPOINT' && (
+                        <span className="chip">
+                          <Flag size={12} aria-hidden="true" /> {t('manage.checkpointAt', { s: q.triggerSeconds })}
+                        </span>
+                      )}{' '}
+                      {q.needsReview && <span className="chip chip--review">{t('player.needsReview')}</span>}
                       <p>{q.question}</p>
+                      {q.sourceNote && <small className="muted block">{t('player.source', { source: q.sourceNote })}</small>}
                       <small className="muted">
                         {t('manage.correctAnswer')}: <code className="inline-code" dir="ltr">{q.correctAnswer}</code>
                       </small>
                     </div>
                     {lesson.canEdit && (
                       <div className="row-actions">
+                        <button className="btn btn--ghost btn--sm" onClick={() => toggleReview(q)}>
+                          {q.needsReview ? t('manage.markReviewed') : t('manage.flagReview')}
+                        </button>
                         <button className="icon-btn" aria-label={t('common.edit')} onClick={() => setQuizEdit(q.id)}>
                           <PenSquare size={16} />
                         </button>
@@ -330,6 +430,17 @@ export default function LessonEditor() {
             ))}
           </ol>
         </section>
+      )}
+
+      {uploadOpen && lesson && (
+        <VideoUploadDialog
+          initial={{ roadmapId: lesson.module.roadmap.id, moduleId: lesson.module.id, lessonId: lesson.id }}
+          onClose={() => setUploadOpen(false)}
+          onUploaded={() => {
+            setUploadOpen(false);
+            lessonReq.reload();
+          }}
+        />
       )}
     </div>
   );

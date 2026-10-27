@@ -11,9 +11,29 @@ import {
   topicStatusMessage,
 } from '../services/learning.js';
 import { issueCertificates } from '../services/certificates.js';
+import { completionStatus, recordVideoProgress, tryCompleteLesson, videoDuration, watchedPercent } from '../services/coursePlayer.js';
+import { presignPlayback, storageConfigured } from '../lib/storage.js';
+import { forbidden } from '../lib/errors.js';
 
 const router = Router();
 router.use(requireAuth);
+
+// Video details for the player. Uploaded files get a short-lived signed playback URL.
+async function lessonVideo(lesson) {
+  if (!lesson.videoProvider) return null;
+  const base = {
+    provider: lesson.videoProvider,
+    duration: videoDuration(lesson),
+    credit: lesson.videoCredit,
+    sourceUrl: lesson.videoSourceUrl,
+  };
+  if (lesson.videoProvider === 'YOUTUBE') {
+    return { ...base, youtubeId: lesson.youtubeId, start: lesson.videoStart ?? 0, end: lesson.videoEnd ?? null };
+  }
+  const asset = lesson.videoAsset;
+  if (!asset || asset.status !== 'READY' || !storageConfigured) return { ...base, unavailable: true };
+  return { ...base, url: await presignPlayback(asset.storageKey), contentType: asset.contentType };
+}
 
 router.get('/:id', async (req, res) => {
   const { id } = idParams.parse(req.params);
@@ -25,12 +45,14 @@ router.get('/:id', async (req, res) => {
     include: {
       resources: { orderBy: { order: 'asc' } },
       quizzes: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], include: { topic: true } },
+      videoAsset: { select: { storageKey: true, contentType: true, status: true } },
+      videoProgress: { where: { userId } },
       module: {
         select: {
           id: true,
           title: true,
           order: true,
-          roadmap: { select: { id: true, title: true, slug: true } },
+          roadmap: { select: { id: true, title: true, slug: true, isSequential: true } },
         },
       },
     },
@@ -62,6 +84,9 @@ router.get('/:id', async (req, res) => {
     const list = attemptsByQuiz.get(a.quizId);
     if (list.length < 10) list.push(a);
   }
+  const [video, completion] = await Promise.all([lessonVideo(lesson), completionStatus(userId, id)]);
+  const watch = lesson.videoProgress[0];
+  const isStaff = req.user.role !== 'STUDENT';
 
   res.json({
     lesson: {
@@ -80,8 +105,27 @@ router.get('/:id', async (req, res) => {
       isCompleted: Boolean(progress?.isCompleted),
       completedAt: progress?.completedAt || null,
       isBookmarked: Boolean(bookmark),
-      preview: req.user.role !== 'STUDENT' && access.locked,
-      quizzes: lesson.quizzes.map((q) => ({ ...publicQuiz(q), attempts: attemptsByQuiz.get(q.id) })),
+      preview: isStaff && access.locked,
+      video,
+      videoProgress: video
+        ? {
+            position: watch?.positionSeconds ?? 0,
+            percent: watchedPercent(watch, video.duration),
+            completed: Boolean(watch?.completedAt),
+          }
+        : null,
+      completion,
+      quizzes: lesson.quizzes
+        .filter((q) => q.placement !== 'CHECKPOINT')
+        .map((q) => ({ ...publicQuiz(q), attempts: attemptsByQuiz.get(q.id) })),
+      checkpoints: lesson.quizzes
+        .filter((q) => q.placement === 'CHECKPOINT')
+        .map((q) => ({
+          ...publicQuiz(q),
+          answered: attemptsByQuiz.get(q.id).length > 0,
+          // Review flags are only shown to staff
+          ...(isStaff && { needsReview: q.needsReview, sourceNote: q.sourceNote }),
+        })),
       topics: topicTags.map((tag) => {
         const w = weaknesses.find((x) => x.topicTag === tag);
         const status = topicStatus(w);
@@ -110,6 +154,19 @@ router.put('/:id/progress', async (req, res) => {
   const { isCompleted } = progressSchema.parse(req.body);
   const { lesson } = await assertLessonAccess(req.user, id);
 
+  // Sequential courses: completion requires the watched video and answered checkpoints, and cannot be undone
+  if (req.user.role === 'STUDENT' && lesson.module.roadmap.isSequential) {
+    if (!isCompleted) throw forbidden('Completed lessons in this course stay completed.');
+    const result = await tryCompleteLesson(req.user, id);
+    if (!result.completed) {
+      throw forbidden(result.status.blockers.join('. '), { code: 'LESSON_INCOMPLETE', details: result.status });
+    }
+    return res.json({
+      progress: { lessonId: id, isCompleted: true, completedAt: new Date() },
+      certificate: result.certificateId ? { id: result.certificateId } : null,
+    });
+  }
+
   const progress = await prisma.userProgress.upsert({
     where: { userId_lessonId: { userId: req.user.id, lessonId: id } },
     create: { userId: req.user.id, lessonId: id, isCompleted, completedAt: isCompleted ? new Date() : null },
@@ -120,6 +177,38 @@ router.put('/:id/progress', async (req, res) => {
   res.json({
     progress: { lessonId: id, isCompleted: progress.isCompleted, completedAt: progress.completedAt },
     certificate: certificate ? { id: certificate.id } : null,
+  });
+});
+
+// The player reports what it actually played (seconds from the clip start). See recordVideoProgress.
+const watchSchema = z
+  .object({
+    from: z.number().min(0).max(100000).nullable().optional(),
+    to: z.number().min(0).max(100000).nullable().optional(),
+    position: z.number().min(0).max(100000),
+  })
+  .refine((d) => d.from == null || d.to == null || d.to >= d.from, { message: 'Invalid watch interval' });
+
+router.post('/:id/video-progress', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const body = watchSchema.parse(req.body);
+  await assertLessonAccess(req.user, id);
+  const lesson = await prisma.lesson.findUnique({
+    where: { id },
+    select: { id: true, videoProvider: true, videoStart: true, videoEnd: true, videoDurationSeconds: true },
+  });
+  const progress = await recordVideoProgress(req.user.id, lesson, body);
+  // Watching the video can finish the lesson when its questions are already answered
+  const result = req.user.role === 'STUDENT' && progress.completedAt ? await tryCompleteLesson(req.user, id) : null;
+  res.json({
+    videoProgress: {
+      position: progress.positionSeconds,
+      percent: watchedPercent(progress, videoDuration(lesson)),
+      completed: Boolean(progress.completedAt),
+    },
+    lessonCompleted: Boolean(result?.completed),
+    certificate: result?.certificateId ? { id: result.certificateId } : null,
+    completion: result?.status ?? (await completionStatus(req.user.id, id)),
   });
 });
 

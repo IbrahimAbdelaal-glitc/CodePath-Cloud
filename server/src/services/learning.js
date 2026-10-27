@@ -21,9 +21,13 @@ export const topicStatusMessage = {
   RETEST: "Review done; retake this topic's questions to reach 70% or more",
 };
 
+// In-video checkpoint questions are formative (answering them completes a lesson; the block quiz checks mastery),
+// so only practice questions placed with the lesson count towards weakness detection.
+const COUNTED = { placement: 'LESSON' };
+
 export async function evaluateTopic(userId, topicTag, { wasIncorrect = false } = {}) {
   const attempts = await prisma.quizAttempt.findMany({
-    where: { userId, quiz: { topicTag } },
+    where: { userId, quiz: { topicTag, ...COUNTED } },
     orderBy: { createdAt: 'desc' },
     take: 200,
     select: { quizId: true, isCorrect: true },
@@ -93,12 +97,12 @@ export async function markTopicReviewed(userId, topicTag) {
 export async function lessonsForTopics(tags) {
   if (!tags.length) return new Map();
   const lessons = await prisma.lesson.findMany({
-    where: { quizzes: { some: { topicTag: { in: tags } } }, module: { roadmap: { isPublished: true } } },
+    where: { quizzes: { some: { topicTag: { in: tags }, ...COUNTED } }, module: { roadmap: { isPublished: true } } },
     select: {
       id: true,
       title: true,
       estimatedMinutes: true,
-      quizzes: { select: { topicTag: true } },
+      quizzes: { where: COUNTED, select: { topicTag: true } },
       module: { select: { title: true, order: true, roadmap: { select: { title: true, slug: true } } } },
       order: true,
     },
@@ -124,8 +128,9 @@ export async function lessonsForTopics(tags) {
 }
 
 // ── Module locking ───────────────────────────────────────────────────────
-// A module is locked if (a) any lesson in its prerequisite modules is incomplete, or
-// (b) the student has a "needs review" topic from those prerequisite modules.
+// A module is locked if (a) any lesson in its prerequisite modules is incomplete,
+// (b) the student has a "needs review" topic from those prerequisite modules, or
+// (c) a prerequisite module has a block quiz the student has not passed yet.
 export async function computeModuleAccess(userId, moduleIds) {
   const result = new Map();
   if (!moduleIds.length) return result;
@@ -140,7 +145,9 @@ export async function computeModuleAccess(userId, moduleIds) {
             select: {
               id: true,
               title: true,
-              lessons: { select: { id: true, quizzes: { select: { topicTag: true } } } },
+              quizPassPercent: true,
+              _count: { select: { blockQuestions: true } },
+              lessons: { select: { id: true, quizzes: { where: COUNTED, select: { topicTag: true } } } },
             },
           },
         },
@@ -151,8 +158,11 @@ export async function computeModuleAccess(userId, moduleIds) {
   const prereqLessonIds = modules.flatMap((m) =>
     m.prerequisites.flatMap((p) => p.prerequisite.lessons.map((l) => l.id)),
   );
+  const quizModuleIds = modules.flatMap((m) =>
+    m.prerequisites.filter((p) => p.prerequisite._count.blockQuestions > 0).map((p) => p.prerequisite.id),
+  );
 
-  const [completed, weaknesses] = userId
+  const [completed, weaknesses, passedQuizzes] = userId
     ? await Promise.all([
         prisma.userProgress.findMany({
           where: { userId, isCompleted: true, lessonId: { in: prereqLessonIds } },
@@ -162,31 +172,43 @@ export async function computeModuleAccess(userId, moduleIds) {
           where: { userId, needsReview: true },
           include: { topic: true },
         }),
+        quizModuleIds.length
+          ? prisma.blockQuizAttempt.findMany({
+              where: { userId, passed: true, moduleId: { in: quizModuleIds } },
+              distinct: ['moduleId'],
+              select: { moduleId: true },
+            })
+          : [],
       ])
-    : [[], []];
+    : [[], [], []];
 
   const completedSet = new Set(completed.map((p) => p.lessonId));
   const weakByTag = new Map(weaknesses.map((w) => [w.topicTag, w]));
+  const passedSet = new Set(passedQuizzes.map((a) => a.moduleId));
 
   const neededTags = new Set();
   const draft = modules.map((m) => {
     const incompleteModules = [];
+    const quizzesToPass = [];
     const reviewTags = new Set();
     for (const { prerequisite: p } of m.prerequisites) {
       const total = p.lessons.length;
       const done = p.lessons.filter((l) => completedSet.has(l.id)).length;
       if (done < total) incompleteModules.push({ id: p.id, title: p.title, completed: done, total });
+      if (p._count.blockQuestions > 0 && !passedSet.has(p.id)) {
+        quizzesToPass.push({ id: p.id, title: p.title, passPercent: p.quizPassPercent });
+      }
       for (const l of p.lessons) {
         for (const q of l.quizzes) if (weakByTag.has(q.topicTag)) reviewTags.add(q.topicTag);
       }
     }
     reviewTags.forEach((t) => neededTags.add(t));
-    return { m, incompleteModules, reviewTags: [...reviewTags] };
+    return { m, incompleteModules, quizzesToPass, reviewTags: [...reviewTags] };
   });
 
   const lessonsByTag = await lessonsForTopics([...neededTags]);
 
-  for (const { m, incompleteModules, reviewTags } of draft) {
+  for (const { m, incompleteModules, quizzesToPass, reviewTags } of draft) {
     const reviewTopics = reviewTags.map((tag) => {
       const w = weakByTag.get(tag);
       const status = topicStatus(w);
@@ -203,6 +225,7 @@ export async function computeModuleAccess(userId, moduleIds) {
       ...incompleteModules.map(
         (p) => `Complete every lesson in "${p.title}" (${p.completed} of ${p.total} done)`,
       ),
+      ...quizzesToPass.map((q) => `Pass the block quiz for "${q.title}" (${q.passPercent}% or more)`),
       ...reviewTopics.map(
         (t) => `"${t.name}" needs review: your accuracy is ${t.accuracy}%, below 70%. ${t.message}`,
       ),
@@ -212,6 +235,7 @@ export async function computeModuleAccess(userId, moduleIds) {
       hasPrerequisites: m.prerequisites.length > 0,
       prerequisites: m.prerequisites.map((p) => ({ id: p.prerequisite.id, title: p.prerequisite.title })),
       incompleteModules,
+      quizzesToPass,
       reviewTopics,
       reasons,
     });
@@ -233,7 +257,13 @@ export function roadmapVisibilityWhere(user) {
 export async function assertLessonAccess(user, lessonId) {
   const lesson = await prisma.lesson.findFirst({
     where: { id: lessonId, module: { roadmap: roadmapVisibilityWhere(user) } },
-    select: { id: true, moduleId: true, module: { select: { roadmap: { select: { id: true, slug: true } } } } },
+    select: {
+      id: true,
+      title: true,
+      order: true,
+      moduleId: true,
+      module: { select: { roadmap: { select: { id: true, slug: true, isSequential: true } } } },
+    },
   });
   if (!lesson) throw notFound('Lesson not found');
 
@@ -243,6 +273,21 @@ export async function assertLessonAccess(user, lessonId) {
       code: 'MODULE_LOCKED',
       details: { ...access, roadmapSlug: lesson.module.roadmap.slug },
     });
+  }
+
+  // Sequential courses: a lesson opens only after the lesson before it in the module is complete
+  if (user.role === 'STUDENT' && lesson.module.roadmap.isSequential) {
+    const previous = await prisma.lesson.findFirst({
+      where: { moduleId: lesson.moduleId, order: { lt: lesson.order } },
+      orderBy: { order: 'desc' },
+      select: { id: true, title: true, progress: { where: { userId: user.id, isCompleted: true }, select: { id: true } } },
+    });
+    if (previous && !previous.progress.length) {
+      throw forbidden(`Finish "${previous.title}" first. Lessons in this course unlock one at a time.`, {
+        code: 'LESSON_LOCKED',
+        details: { previousLessonId: previous.id, previousLessonTitle: previous.title, roadmapSlug: lesson.module.roadmap.slug },
+      });
+    }
   }
   return { lesson, access };
 }
@@ -288,9 +333,31 @@ export function quizOptions(quiz) {
   return Array.isArray(quiz.options) ? quiz.options.map(String) : [];
 }
 
+// Multi-select answers travel as an array or a JSON array string; order does not matter
+export function parseSelection(raw) {
+  let value = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      value = null;
+    }
+  }
+  if (!Array.isArray(value)) throw badRequest('Choose at least one option');
+  return [...new Set(value.map((v) => String(v).trim()))].sort();
+}
+
 export function checkAnswer(quiz, rawAnswer) {
   const options = quizOptions(quiz);
   const accepted = [quiz.correctAnswer, ...(quiz.acceptedAnswers || [])];
+
+  if (quiz.questionType === 'MULTI_SELECT') {
+    const picked = parseSelection(rawAnswer);
+    if (!picked.length) throw badRequest('Choose at least one option');
+    if (picked.some((p) => !options.includes(p))) throw badRequest('Choose from the available options');
+    const correct = parseSelection(quiz.correctAnswer);
+    return picked.length === correct.length && picked.every((p, i) => p === correct[i]);
+  }
 
   if (quiz.questionType === 'MULTIPLE_CHOICE' || options.length) {
     const answer = String(rawAnswer).trim();
@@ -314,5 +381,7 @@ export function publicQuiz(quiz) {
     options: quizOptions(quiz),
     points: quiz.points,
     topic: quiz.topic ? { tag: quiz.topic.tag, name: quiz.topic.name } : { tag: quiz.topicTag },
+    placement: quiz.placement ?? 'LESSON',
+    triggerSeconds: quiz.triggerSeconds ?? null,
   };
 }

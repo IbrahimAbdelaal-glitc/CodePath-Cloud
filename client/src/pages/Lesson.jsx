@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -73,6 +73,8 @@ export default function Lesson() {
   }
 
   const lesson = data.lesson;
+  // Video courses are taken in the course player, which enforces their sequence
+  if (lesson.roadmap.isSequential) return <Navigate to={`/learn/${lesson.roadmap.slug}/${lesson.id}`} replace />;
   const Prev = dir === 'rtl' ? ArrowRight : ArrowLeft;
   const Next = dir === 'rtl' ? ArrowLeft : ArrowRight;
 

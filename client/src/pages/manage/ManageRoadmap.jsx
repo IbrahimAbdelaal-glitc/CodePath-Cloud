@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, ExternalLink, FilePlus2, PenSquare, Plus, Save, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ClipboardCheck, ExternalLink, FilePlus2, PenSquare, Plus, Save, Trash2, Upload, Video, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
@@ -9,6 +9,8 @@ import { useFetch } from '../../lib/useFetch.js';
 import { DifficultyBadge } from '../../components/Badges.jsx';
 import { Alert, ErrorState, PageSkeleton } from '../../components/States.jsx';
 import RoadmapForm, { FieldError, fieldErrors } from './RoadmapForm.jsx';
+import BlockBank from './BlockBank.jsx';
+import VideoUploadDialog from '../../components/VideoUploadDialog.jsx';
 
 function ModuleForm({ initial, modules, onSubmit, onCancel, submitLabel }) {
   const { t } = useI18n();
@@ -151,6 +153,8 @@ export default function ManageRoadmap() {
   const { data, error, loading, reload } = useFetch(`/api/manage/roadmaps/${id}`);
   const [editing, setEditing] = useState(null);
   const [addingModule, setAddingModule] = useState(false);
+  const [uploadFor, setUploadFor] = useState(null);
+  const [bankFor, setBankFor] = useState(null);
 
   if (loading && !data) return <PageSkeleton />;
   if (error)
@@ -310,9 +314,21 @@ export default function ManageRoadmap() {
               <ul className="manage-lessons">
                 {m.lessons.map((l, li) => (
                   <li key={l.id}>
-                    <span>{l.title}</span>
+                    <span>
+                      {l.videoProvider && <Video size={14} aria-label={t(`manage.videoProvider.${l.videoProvider}`)} />} {l.title}
+                    </span>
                     <span className="small muted">{fmt.count('questions', l.quizCount)}</span>
                     <div className="row-actions">
+                      {r.canEdit && (
+                        <button
+                          className="icon-btn icon-btn--sm"
+                          aria-label={t('upload.buttonFor', { title: l.title })}
+                          title={t('upload.button')}
+                          onClick={() => setUploadFor({ roadmapId: r.id, moduleId: m.id, lessonId: l.id })}
+                        >
+                          <Upload size={14} />
+                        </button>
+                      )}
                       {r.canEdit && (
                         <>
                           <button className="icon-btn icon-btn--sm" aria-label={t('manage.moveUp')} disabled={li === 0} onClick={() => run(() => api(`/api/manage/lessons/${l.id}/move`, { method: 'POST', body: { direction: 'up' } }))}>
@@ -346,6 +362,19 @@ export default function ManageRoadmap() {
                   </li>
                 ))}
               </ul>
+              {m.blockQuestionCount > 0 && (
+                <div className="manage-bank">
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    aria-expanded={bankFor === m.id}
+                    onClick={() => setBankFor(bankFor === m.id ? null : m.id)}
+                  >
+                    <ClipboardCheck size={15} aria-hidden="true" /> {t('manage.blockBank', { n: fmt.number(m.blockQuestionCount) })}
+                  </button>
+                  {bankFor === m.id && <BlockBank moduleId={m.id} />}
+                </div>
+              )}
               <Link to={`/manage/modules/${m.id}/lessons/new`} className="btn btn--ghost btn--sm">
                 <FilePlus2 size={15} aria-hidden="true" /> {t('manage.addLesson')}
               </Link>
@@ -353,6 +382,16 @@ export default function ManageRoadmap() {
           ))}
         </ol>
       </section>
+      {uploadFor && (
+        <VideoUploadDialog
+          initial={uploadFor}
+          onClose={() => setUploadFor(null)}
+          onUploaded={() => {
+            setUploadFor(null);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

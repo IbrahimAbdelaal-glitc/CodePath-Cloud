@@ -8,6 +8,8 @@ import { prisma } from '../lib/prisma.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { difficulty, httpUrl, idParams, slug, topicTag, uuid } from '../lib/validation.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { config } from '../config.js';
+import { deleteObject, headObject, presignUpload, storageConfigured, UPLOAD_URL_SECONDS } from '../lib/storage.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('INSTRUCTOR', 'ADMIN'));
@@ -82,20 +84,53 @@ const resourceSchema = z.object({
   type: z.enum(['ARTICLE', 'VIDEO', 'DOCUMENTATION'], { error: 'Invalid resource type' }),
 });
 
-const lessonSchema = z.object({
-  title: text(2, 160, 'Lesson title is too short'),
-  summary: optionalText(500),
-  content: text(10, 60000, 'Lesson content is too short'),
-  keyTakeaways: z.array(z.string().trim().min(1).max(300)).max(15).default([]),
-  difficulty,
-  estimatedMinutes: minutes,
-  resources: z.array(resourceSchema).max(20).optional(),
+const seconds = z.coerce.number().int().min(0, 'Times cannot be negative').max(100000).optional().nullable();
+// YouTube video ids are 11 characters; a full watch, share or embed link is also accepted
+const youtubeId = z
+  .string()
+  .trim()
+  .transform((v) => v.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/)?.[1] ?? v)
+  .pipe(z.string().regex(/^[\w-]{11}$/, 'Enter a YouTube link or an 11-character video id'));
+
+const lessonFields = z.object({
+    title: text(2, 160, 'Lesson title is too short'),
+    summary: optionalText(500),
+    content: text(10, 60000, 'Lesson content is too short'),
+    keyTakeaways: z.array(z.string().trim().min(1).max(300)).max(15).default([]),
+    difficulty,
+    estimatedMinutes: minutes,
+    resources: z.array(resourceSchema).max(20).optional(),
+    // Linking a YouTube video. Uploaded files are attached through the upload endpoints instead.
+    youtubeId: youtubeId.optional().nullable().or(z.literal('').transform(() => null)),
+    videoStart: seconds,
+    videoEnd: seconds,
+    videoDurationSeconds: seconds,
+    videoCredit: optionalText(300),
+    videoSourceUrl: httpUrl.optional().nullable().or(z.literal('').transform(() => null)),
 });
+const clipOrder = [
+  (d) => d.videoStart == null || d.videoEnd == null || d.videoEnd > d.videoStart,
+  { message: 'The end time must be after the start time', path: ['videoEnd'] },
+];
+const lessonSchema = lessonFields.refine(...clipOrder);
+const lessonPatchSchema = lessonFields.partial().refine(...clipOrder);
+
+// A YouTube id in the body switches the lesson to YouTube; an empty one removes a YouTube video
+function videoFields(data) {
+  if (!('youtubeId' in data)) return data;
+  const { youtubeId: id, ...rest } = data;
+  return id ? { ...rest, youtubeId: id, videoProvider: 'YOUTUBE' } : { ...rest, youtubeId: null };
+}
 
 const quizSchema = z
   .object({
     question: text(5, 1000, 'Question text is too short'),
-    questionType: z.enum(['MULTIPLE_CHOICE', 'CODE_OUTPUT', 'FILL_IN_THE_BLANK'], { error: 'Invalid question type' }),
+    questionType: z.enum(['MULTIPLE_CHOICE', 'CODE_OUTPUT', 'FILL_IN_THE_BLANK', 'TRUE_FALSE', 'MULTI_SELECT'], {
+      error: 'Invalid question type',
+    }),
+    placement: z.enum(['LESSON', 'CHECKPOINT'], { error: 'Invalid question placement' }).default('LESSON'),
+    triggerSeconds: seconds,
+    needsReview: z.boolean().optional(),
     codeSnippet: optionalText(5000),
     options: z.array(z.string().trim().min(1, 'Options cannot be empty').max(300)).max(8).optional().default([]),
     correctAnswer: text(1, 1000, 'The correct answer is required'),
@@ -108,16 +143,33 @@ const quizSchema = z
     order: z.coerce.number().int().min(1, 'Position must be 1 or more').max(1000, 'Position is too large').optional(),
   })
   .superRefine((q, ctx) => {
-    if (q.questionType === 'MULTIPLE_CHOICE' && q.options.length < 2) {
-      ctx.addIssue({ code: 'custom', path: ['options'], message: 'A multiple-choice question needs at least two options' });
+    const choice = ['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT'].includes(q.questionType);
+    if (choice && q.options.length < 2) {
+      ctx.addIssue({ code: 'custom', path: ['options'], message: 'This question needs at least two options' });
     }
-    if (q.options.length && !q.options.includes(q.correctAnswer)) {
+    if (q.questionType === 'TRUE_FALSE' && (q.options.length !== 2 || !q.options.includes('True') || !q.options.includes('False'))) {
+      ctx.addIssue({ code: 'custom', path: ['options'], message: 'A true/false question has exactly the options True and False' });
+    }
+    if (q.questionType === 'MULTI_SELECT') {
+      let picked = null;
+      try {
+        picked = JSON.parse(q.correctAnswer);
+      } catch {
+        /* reported below */
+      }
+      if (!Array.isArray(picked) || !picked.length || picked.some((p) => !q.options.includes(p))) {
+        ctx.addIssue({ code: 'custom', path: ['correctAnswer'], message: 'Select at least one correct option' });
+      }
+    } else if (q.options.length && !q.options.includes(q.correctAnswer)) {
       ctx.addIssue({ code: 'custom', path: ['correctAnswer'], message: 'The correct answer must match one of the options' });
     }
     if (new Set(q.options).size !== q.options.length) {
       ctx.addIssue({ code: 'custom', path: ['options'], message: 'Options must not repeat' });
     }
-    if (q.questionType !== 'MULTIPLE_CHOICE' && !q.codeSnippet) {
+    if (q.placement === 'CHECKPOINT' && q.triggerSeconds == null) {
+      ctx.addIssue({ code: 'custom', path: ['triggerSeconds'], message: 'Choose when the question appears in the video' });
+    }
+    if (!choice && !q.codeSnippet) {
       ctx.addIssue({ code: 'custom', path: ['codeSnippet'], message: 'This question type needs a code snippet' });
     }
     if (q.questionType === 'FILL_IN_THE_BLANK' && q.codeSnippet && !q.codeSnippet.includes('___')) {
@@ -225,9 +277,18 @@ router.get('/roadmaps/:id', async (req, res) => {
         orderBy: { order: 'asc' },
         include: {
           prerequisites: { select: { prerequisiteId: true } },
+          _count: { select: { blockQuestions: true } },
           lessons: {
             orderBy: { order: 'asc' },
-            select: { id: true, title: true, order: true, difficulty: true, estimatedMinutes: true, _count: { select: { quizzes: true } } },
+            select: {
+              id: true,
+              title: true,
+              order: true,
+              difficulty: true,
+              estimatedMinutes: true,
+              videoProvider: true,
+              _count: { select: { quizzes: true } },
+            },
           },
         },
       },
@@ -240,8 +301,9 @@ router.get('/roadmaps/:id', async (req, res) => {
       ...roadmap,
       canEdit: await canEdit(req.user, id),
       instructors: roadmap.instructors.map((i) => i.user),
-      modules: roadmap.modules.map((m) => ({
+      modules: roadmap.modules.map(({ _count, ...m }) => ({
         ...m,
+        blockQuestionCount: _count.blockQuestions,
         prerequisiteIds: m.prerequisites.map((p) => p.prerequisiteId),
         prerequisites: undefined,
         lessons: m.lessons.map(({ _count, ...l }) => ({ ...l, quizCount: _count.quizzes })),
@@ -329,7 +391,7 @@ router.post('/modules/:id/lessons', async (req, res) => {
   const last = await prisma.lesson.findFirst({ where: { moduleId }, orderBy: { order: 'desc' } });
   const lesson = await prisma.lesson.create({
     data: {
-      ...data,
+      ...videoFields(data),
       moduleId,
       order: (last?.order ?? 0) + 1,
       resources: { create: resources.map((r, i) => ({ ...r, order: i })) },
@@ -348,6 +410,7 @@ router.get('/lessons/:id', async (req, res) => {
       resources: { orderBy: { order: 'asc' } },
       quizzes: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], include: { topic: true } },
       module: { select: { id: true, title: true, roadmap: { select: { id: true, title: true, slug: true } } } },
+      videoAsset: { select: { id: true, originalName: true, sizeBytes: true, contentType: true, durationSeconds: true, completedAt: true } },
     },
   });
   res.json({ lesson: { ...lesson, canEdit: await canEdit(req.user, roadmapId) } });
@@ -356,7 +419,7 @@ router.get('/lessons/:id', async (req, res) => {
 router.patch('/lessons/:id', async (req, res) => {
   const { id } = idParams.parse(req.params);
   await assertCanManage(req.user, await roadmapOfLesson(id));
-  const { resources, ...data } = lessonSchema.partial().parse(req.body);
+  const { resources, ...data } = videoFields(lessonPatchSchema.parse(req.body));
   const lesson = await prisma.$transaction(async (tx) => {
     if (resources) {
       await tx.lessonResource.deleteMany({ where: { lessonId: id } });
@@ -426,6 +489,167 @@ router.delete('/quizzes/:id', async (req, res) => {
 router.get('/topics', async (req, res) => {
   const topics = await prisma.topic.findMany({ orderBy: { tag: 'asc' } });
   res.json({ topics });
+});
+
+// ── Content review ───────────────────────────────────────────────
+// Catalog questions are flagged until an instructor confirms they match the linked video
+const reviewSchema = z.object({ needsReview: z.boolean({ error: 'needsReview must be true or false' }) });
+
+router.patch('/quizzes/:id/review', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  await assertCanManage(req.user, await roadmapOfQuiz(id));
+  const { needsReview } = reviewSchema.parse(req.body);
+  const quiz = await prisma.quiz.update({ where: { id }, data: { needsReview }, select: { id: true, needsReview: true } });
+  res.json({ quiz });
+});
+
+router.get('/modules/:id/block-questions', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const roadmapId = await roadmapOfModule(id);
+  const [questions, mod] = await Promise.all([
+    prisma.blockQuestion.findMany({ where: { moduleId: id }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }),
+    prisma.module.findUnique({ where: { id }, select: { id: true, title: true, quizQuestionCount: true, quizPassPercent: true } }),
+  ]);
+  res.json({ module: mod, questions, canEdit: await canEdit(req.user, roadmapId) });
+});
+
+router.patch('/block-questions/:id/review', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const q = await prisma.blockQuestion.findUnique({ where: { id }, select: { module: { select: { roadmapId: true } } } });
+  if (!q) throw notFound('Question not found');
+  await assertCanManage(req.user, q.module.roadmapId);
+  const { needsReview } = reviewSchema.parse(req.body);
+  const question = await prisma.blockQuestion.update({ where: { id }, data: { needsReview }, select: { id: true, needsReview: true } });
+  res.json({ question });
+});
+
+// ── Video uploads ────────────────────────────────────────────────
+// 1. POST /lessons/:id/video-uploads → validates the file, records a PENDING asset and returns a presigned PUT URL.
+// 2. The browser uploads the file straight to object storage (with progress).
+// 3. POST /video-uploads/:id/complete → the server checks the stored object and attaches it to the lesson.
+// Only admins and instructors assigned to the course can upload, checked here on the server.
+const VIDEO_TYPES = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-m4v': 'm4v' };
+const MB = 1024 * 1024;
+
+router.get('/storage', async (req, res) => {
+  res.json({
+    configured: storageConfigured,
+    maxMb: config.storage.maxVideoMb,
+    allowedTypes: Object.keys(VIDEO_TYPES),
+  });
+});
+
+const uploadSchema = z.object({
+  fileName: z.string().trim().min(1, 'The file needs a name').max(200, 'The file name is too long'),
+  contentType: z.string().trim().refine((t) => t in VIDEO_TYPES, 'Upload an MP4, WebM or MOV video file'),
+  sizeBytes: z.coerce
+    .number()
+    .int()
+    .min(1, 'The file is empty')
+    .refine((n) => n <= config.storage.maxVideoMb * MB, `The video is larger than the ${config.storage.maxVideoMb} MB limit`),
+  durationSeconds: z.coerce.number().int().min(1).max(100000).optional().nullable(),
+});
+
+router.post('/lessons/:id/video-uploads', async (req, res) => {
+  const { id: lessonId } = idParams.parse(req.params);
+  await assertCanManage(req.user, await roadmapOfLesson(lessonId));
+  const data = uploadSchema.parse(req.body);
+  if (!storageConfigured) {
+    throw badRequest('Video storage is not configured on the server yet. Ask an administrator to add the storage credentials.', {
+      code: 'STORAGE_NOT_CONFIGURED',
+    });
+  }
+  const asset = await prisma.videoAsset.create({
+    data: {
+      storageKey: `pending/${lessonId}/${Date.now()}`,
+      originalName: data.fileName,
+      contentType: data.contentType,
+      sizeBytes: data.sizeBytes,
+      durationSeconds: data.durationSeconds ?? null,
+      lessonId,
+      uploadedById: req.user.id,
+    },
+  });
+  // The object key uses only generated ids, never the user's file name
+  const storageKey = `lessons/${lessonId}/${asset.id}.${VIDEO_TYPES[data.contentType]}`;
+  await prisma.videoAsset.update({ where: { id: asset.id }, data: { storageKey } });
+  const uploadUrl = await presignUpload({ key: storageKey, contentType: data.contentType, sizeBytes: data.sizeBytes });
+  res.status(201).json({
+    upload: {
+      id: asset.id,
+      url: uploadUrl,
+      method: 'PUT',
+      headers: { 'Content-Type': data.contentType },
+      expiresInSeconds: UPLOAD_URL_SECONDS,
+    },
+  });
+});
+
+async function findUpload(user, id) {
+  const asset = await prisma.videoAsset.findUnique({ where: { id } });
+  if (!asset || !asset.lessonId) throw notFound('Upload not found');
+  await assertCanManage(user, await roadmapOfLesson(asset.lessonId));
+  return asset;
+}
+
+const completeSchema = z.object({ durationSeconds: z.coerce.number().int().min(1).max(100000).optional().nullable() });
+
+router.post('/video-uploads/:id/complete', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const { durationSeconds } = completeSchema.parse(req.body ?? {});
+  const asset = await findUpload(req.user, id);
+  if (asset.status !== 'PENDING') throw badRequest('This upload has already been processed');
+
+  const stored = await headObject(asset.storageKey);
+  if (!stored) throw badRequest('The video did not reach storage. Please try the upload again.', { code: 'UPLOAD_MISSING' });
+  if (stored.sizeBytes !== asset.sizeBytes) {
+    await prisma.videoAsset.update({ where: { id }, data: { status: 'FAILED' } });
+    await deleteObject(asset.storageKey).catch(() => {});
+    throw badRequest('The uploaded file is incomplete. Please try the upload again.', { code: 'UPLOAD_INCOMPLETE' });
+  }
+
+  const duration = durationSeconds ?? asset.durationSeconds;
+  const previous = await prisma.lesson.findUnique({ where: { id: asset.lessonId }, select: { videoAsset: true } });
+  const lesson = await prisma.$transaction(async (tx) => {
+    await tx.videoAsset.update({ where: { id }, data: { status: 'READY', completedAt: new Date(), durationSeconds: duration } });
+    if (previous?.videoAsset) await tx.videoAsset.update({ where: { id: previous.videoAsset.id }, data: { status: 'REPLACED' } });
+    // An uploaded video replaces the lesson's clip settings, so watch progress restarts against the new file
+    await tx.lessonVideoProgress.deleteMany({ where: { lessonId: asset.lessonId, completedAt: null } });
+    return tx.lesson.update({
+      where: { id: asset.lessonId },
+      data: { videoProvider: 'UPLOAD', videoAssetId: id, videoDurationSeconds: duration, videoStart: null, videoEnd: null },
+      select: { id: true, title: true, videoProvider: true, videoDurationSeconds: true },
+    });
+  });
+  if (previous?.videoAsset) await deleteObject(previous.videoAsset.storageKey).catch(() => {});
+  res.json({ lesson, asset: { id, originalName: asset.originalName, sizeBytes: asset.sizeBytes, durationSeconds: duration } });
+});
+
+router.post('/video-uploads/:id/abort', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const asset = await findUpload(req.user, id);
+  if (asset.status === 'PENDING') {
+    await prisma.videoAsset.update({ where: { id }, data: { status: 'FAILED' } });
+    await deleteObject(asset.storageKey).catch(() => {});
+  }
+  res.status(204).end();
+});
+
+// Removes an uploaded video; the lesson falls back to its YouTube video when it has one
+router.delete('/lessons/:id/video-upload', async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  await assertCanManage(req.user, await roadmapOfLesson(id));
+  const lesson = await prisma.lesson.findUnique({ where: { id }, include: { videoAsset: true } });
+  if (!lesson.videoAsset) throw notFound('This lesson has no uploaded video');
+  await prisma.$transaction([
+    prisma.videoAsset.update({ where: { id: lesson.videoAsset.id }, data: { status: 'REPLACED' } }),
+    prisma.lesson.update({
+      where: { id },
+      data: { videoAssetId: null, videoProvider: lesson.youtubeId ? 'YOUTUBE' : null },
+    }),
+  ]);
+  await deleteObject(lesson.videoAsset.storageKey).catch(() => {});
+  res.status(204).end();
 });
 
 export default router;

@@ -22,3 +22,20 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      # Public web app URL used in password reset links
+      - key: APP_URL
+        sync: false
+      # Email: Render's free plan blocks SMTP ports, so use an HTTPS email API (Resend or Brevo)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # Video uploads: S3-compatible storage (Neon Object Storage, Cloudflare R2, AWS S3)
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_REGION
+        value: us-east-2
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false

@@ -20,6 +20,9 @@ A learning platform for programming: **structured learning paths**, **interactiv
 
 ## Features
 
+- **Cybersecurity video courses:** four sequential courses from beginner to advanced (below), played in a course player with in-video checkpoint questions, a block quiz after every module, curated research readings and a certificate at the end.
+- **Instructor video uploads:** admins and assigned instructors can upload a lesson video straight to object storage from the course player, the lesson editor or the course manager.
+- **Matrix design:** a black-and-green theme with animated digital rain (canvas, respects reduced motion, can be paused).
 - **Learning paths:** four ready-made paths (Frontend, Backend with .NET, Backend with Python, Full-Stack AI). Each has a description, ordered modules and lessons, prerequisites, an estimated duration and a difficulty level.
 - **Lessons:** safe Markdown content (raw HTML is never rendered), syntax-highlighted code examples with a copy button, key takeaways, resources (articles, videos, documentation), bookmarks and completion tracking.
 - **Interactive quizzes:** multiple choice, predict the output, and complete the code. **The correct answer is never sent to the browser before an attempt**; grading happens on the server, then the explanation is shown immediately and the attempt history and score are updated.
@@ -277,9 +280,33 @@ The server refuses to open lessons in a locked module, mark them complete or acc
 5. After a successful reset, the token is marked used, the password is re-hashed, and the user's `tokenVersion` is incremented, which **signs the user out on every device**. Changing the password from the profile page does the same, but keeps the current session.
 6. **Rate limits:** 5 reset requests per IP per 15 minutes, at most 3 emails per account per hour, and 20 verify/reset attempts per IP per 15 minutes.
 
-**Email setup:** set `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM` (see `server/.env.example`), and set `APP_URL` to your deployed web app URL. Any SMTP provider works, such as Resend, Brevo, SendGrid, Mailgun, or Gmail with an app password.
+**Email setup:** set `RESEND_API_KEY` (or `BREVO_API_KEY`) and `MAIL_FROM`, and set `APP_URL` to your deployed web app URL. Render's free web services block outbound SMTP ports, so use one of these HTTPS email APIs there; `SMTP_*` settings still work on hosts that allow SMTP. Admins can send a test email from the **System** page.
 
 **Testing locally without email:** leave `SMTP_HOST` empty. Reset emails are then saved as HTML files in `server/.dev-mail/` (ignored by Git) instead of being sent; open the newest file and click the link. The API never returns the token, and only the file name is logged. In production (`NODE_ENV=production`) SMTP is required; without it, no email is sent and the failure is logged.
+
+### Cybersecurity courses
+
+The courses live in `server/src/catalog/` and are created automatically when the API starts (`AUTO_SEED_COURSES`, default on). Bump a course's `version` to update its content in place: items are matched by key, so student progress on unchanged lessons is kept, and uploaded videos and instructor review decisions are preserved. Run `npm --prefix server run check:catalog` to validate the content.
+
+| # | Course | Level | Videos | Questions grounded in |
+| --- | --- | --- | --- | --- |
+| 1 | Cybersecurity Foundations | Beginner | Harvard CS50's Introduction to Cybersecurity (CC BY-NC-SA 4.0), cut at the lectures' chapter markers | CS50's published lecture notes |
+| 2 | Networking & Linux Foundations | Beginner | Professor Messer N10-009 Network+; TCM Security "Beginner Linux for Ethical Hackers" | Messer's published transcripts; Linux questions are flagged for instructor review |
+| 3 | Defensive Security Operations | Intermediate | Professor Messer SY0-701 Security+; TCM Security "SOC 101" (chapter clips) | Messer's transcripts; SOC 101 questions flagged for review |
+| 4 | Security Architecture, Governance & Risk | Advanced | Professor Messer SY0-701 Security+ (domains 3–5) | Messer's transcripts |
+
+Every module lists verified readings (NIST publications, RFCs, peer-reviewed papers, and Harvard sources such as the Harvard Law Review and the Belfer Center). Questions that could not be checked against the video text are flagged "Needs instructor review"; instructors can confirm them in the lesson editor and in the module's question bank.
+
+### Course player rules
+
+- Lessons unlock one at a time. A lesson completes when the student has watched at least 90% of the video and answered its checkpoint questions (right or wrong).
+- Watching is verified on the server: the player reports the intervals it actually played, credit is limited by elapsed wall-clock time (up to 2× speed), so skipping ahead earns nothing.
+- Checkpoints pause the video at their trigger time and show the explanation after answering. They are formative and do not affect the 70% weak-topic rule.
+- Each module ends with a block quiz drawn at random from the module's bank (10 questions, pass mark 70%). Passing it unlocks the next module; every attempt is saved and can be reviewed.
+
+### Video uploads
+
+Browsers upload directly to an S3-compatible bucket with a short-lived signed URL (the signature fixes the file type and size), then the API checks the stored object and attaches it to the lesson. Playback uses signed URLs and the bucket stays private. Only admins and instructors assigned to the course can upload (checked on the server). Configure `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` (see `server/.env.example`); with Neon Object Storage, create a credential with `storage:read` and `storage:write` scopes for the branch. The admin **System** page shows whether storage and email are configured.
 
 ### Interface text
 

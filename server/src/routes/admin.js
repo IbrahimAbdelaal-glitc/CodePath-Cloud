@@ -5,6 +5,10 @@ import { prisma } from '../lib/prisma.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { idParams, uuid } from '../lib/validation.js';
 import { publicUserSelect, requireAuth, requireRole } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import { config } from '../config.js';
+import { mailMode, parseAddress, sendMail } from '../lib/mailer.js';
+import { storageConfigured } from '../lib/storage.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('ADMIN'));
@@ -128,6 +132,40 @@ router.put('/roadmaps/:id/instructors', async (req, res) => {
     select: { user: { select: { id: true, name: true, email: true } } },
   });
   res.json({ instructors: assigned.map((a) => a.user) });
+});
+
+// ── System status ───────────────────────────────────────────────
+// Which integrations are configured (never their values), so setup can be checked from the browser
+router.get('/system', async (req, res) => {
+  const [videos, pendingReview] = await Promise.all([
+    prisma.videoAsset.count({ where: { status: 'READY' } }),
+    prisma.blockQuestion.count({ where: { needsReview: true } }),
+  ]);
+  res.json({
+    mail: { mode: mailMode, from: parseAddress(config.mail.from).email },
+    storage: { configured: storageConfigured, bucket: config.storage.bucket, maxVideoMb: config.storage.maxVideoMb },
+    appUrl: config.appUrl,
+    uploadedVideos: videos,
+    questionsAwaitingReview: pendingReview,
+  });
+});
+
+const testMailLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
+
+// Sends a test message to the signed-in admin's own address and reports the provider's answer
+router.post('/system/test-email', testMailLimiter, async (req, res) => {
+  try {
+    await sendMail({
+      to: req.user.email,
+      subject: 'CodePath Cloud test email',
+      text: 'This is a test email from CodePath Cloud. Email delivery is working.',
+      html: '<p>This is a test email from <strong>CodePath Cloud</strong>. Email delivery is working.</p>',
+    });
+    res.json({ sent: true, to: req.user.email, mode: mailMode });
+  } catch (err) {
+    console.error('Test email failed:', err.message);
+    throw badRequest(`The email could not be sent: ${err.message}`, { code: 'MAIL_FAILED' });
+  }
 });
 
 export default router;

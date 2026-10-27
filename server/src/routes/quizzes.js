@@ -5,6 +5,7 @@ import { notFound } from '../lib/errors.js';
 import { idParams } from '../lib/validation.js';
 import { requireAuth } from '../middleware/auth.js';
 import { assertLessonAccess, checkAnswer, evaluateTopic, quizOptions } from '../services/learning.js';
+import { tryCompleteLesson } from '../services/coursePlayer.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -34,9 +35,11 @@ router.post('/:id/attempts', async (req, res) => {
     select: { id: true, userAnswer: true, isCorrect: true, score: true, createdAt: true },
   });
 
-  const [topic, totals] = await Promise.all([
+  const [topic, totals, completion] = await Promise.all([
     evaluateTopic(req.user.id, quiz.topicTag, { wasIncorrect: !isCorrect }),
     prisma.quizAttempt.aggregate({ where: { userId: req.user.id }, _sum: { score: true }, _count: true }),
+    // Answering the last in-video question can finish the lesson when the video is already watched
+    quiz.placement === 'CHECKPOINT' && req.user.role === 'STUDENT' ? tryCompleteLesson(req.user, quiz.lessonId) : null,
   ]);
 
   res.status(201).json({
@@ -51,6 +54,9 @@ router.post('/:id/attempts', async (req, res) => {
       topic: { ...topic, name: quiz.topic.name },
       totalScore: totals._sum.score || 0,
       totalAttempts: totals._count,
+      lessonCompleted: Boolean(completion?.completed),
+      certificate: completion?.certificateId ? { id: completion.certificateId } : null,
+      completion: completion?.status ?? null,
     },
   });
 });

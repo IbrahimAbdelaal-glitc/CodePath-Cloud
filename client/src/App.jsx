@@ -22,6 +22,9 @@ const ManageHome = lazy(() => import('./pages/manage/ManageHome.jsx'));
 const ManageRoadmap = lazy(() => import('./pages/manage/ManageRoadmap.jsx'));
 const LessonEditor = lazy(() => import('./pages/manage/LessonEditor.jsx'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers.jsx'));
+const AdminSystem = lazy(() => import('./pages/admin/AdminSystem.jsx'));
+const CoursePlayer = lazy(() => import('./pages/CoursePlayer.jsx'));
+const BlockQuiz = lazy(() => import('./pages/BlockQuiz.jsx'));
 
 export default function App() {
   return (
@@ -39,6 +42,9 @@ export default function App() {
 
           <Route element={<RequireAuth />}>
             <Route path="lessons/:id" element={<Lesson />} />
+            <Route path="learn/:slug" element={<CoursePlayer />} />
+            <Route path="learn/:slug/quiz/:moduleId" element={<BlockQuiz />} />
+            <Route path="learn/:slug/:lessonId" element={<CoursePlayer />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="bookmarks" element={<Bookmarks />} />
             <Route path="profile" element={<Profile />} />
@@ -56,6 +62,7 @@ export default function App() {
 
           <Route element={<RequireAuth roles={['ADMIN']} />}>
             <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/system" element={<AdminSystem />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

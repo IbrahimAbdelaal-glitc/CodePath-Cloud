@@ -1,0 +1,122 @@
+/* "Matrix" look for the dark theme: animated digital rain behind near-opaque, readable surfaces.
+   The light theme is unaffected except for the shared stacking rules. */
+
+/* ── Digital rain layers ───────────────────────── */
+.matrix-rain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #000;
+}
+.matrix-rain canvas {
+  position: absolute;
+  inset: 0;
+}
+/* Far layer: smaller, dimmer and out of focus, like the edges of the reference photo */
+.matrix-rain__far {
+  filter: blur(1.6px);
+  opacity: 0.7;
+}
+.matrix-rain__near {
+  opacity: 0.9;
+}
+/* Darkens the centre so foreground text keeps strong contrast */
+.matrix-rain__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 60% at 50% 45%, rgb(0 0 0 / 35%), rgb(0 0 0 / 8%) 70%, transparent);
+}
+
+/* Everything else sits above the rain */
+.app-shell > :not(.matrix-rain) {
+  position: relative;
+  z-index: 1;
+}
+.app-shell > .site-header {
+  position: sticky;
+  z-index: 50;
+}
+
+/* ── Dark theme treatment ─────────────────────── */
+:root[data-theme='dark'] body {
+  background: #000;
+}
+:root[data-theme='dark'] h1,
+:root[data-theme='dark'] h2,
+:root[data-theme='dark'] h3,
+:root[data-theme='dark'] .brand-name {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+:root[data-theme='dark'] h1 {
+  text-shadow: var(--glow);
+}
+:root[data-theme='dark'] .site-header {
+  background: rgb(0 8 3 / 78%);
+  border-bottom-color: var(--line-strong);
+  backdrop-filter: blur(8px) saturate(1.2);
+}
+:root[data-theme='dark'] .site-footer {
+  background: rgb(0 8 3 / 88%);
+}
+:root[data-theme='dark'] .hero {
+  background: linear-gradient(90deg, rgb(0 0 0 / 60%) 0%, rgb(0 0 0 / 22%) 55%, rgb(0 0 0 / 5%) 100%);
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme='dark'] .hero h1,
+:root[data-theme='dark'] .hero__lead {
+  text-shadow: 0 0 12px #000, 0 0 24px #000, var(--glow);
+}
+:root[data-theme='dark'] .hero__bg {
+  display: none;
+}
+:root[data-theme='dark'] .hero h1 mark {
+  background: none;
+  color: var(--brand-2);
+  text-shadow: var(--glow);
+}
+:root[data-theme='dark'] .path-hero {
+  background: linear-gradient(180deg, rgb(0 10 4 / 88%), rgb(0 0 0 / 55%));
+}
+:root[data-theme='dark'] .section--tinted {
+  background: rgb(0 14 6 / 80%);
+}
+:root[data-theme='dark'] .panel,
+:root[data-theme='dark'] .path-card,
+:root[data-theme='dark'] .auth-card,
+:root[data-theme='dark'] .quiz,
+:root[data-theme='dark'] .module__body {
+  backdrop-filter: blur(3px);
+  border-color: var(--line-strong);
+}
+:root[data-theme='dark'] .btn--primary {
+  box-shadow: 0 0 0 1px var(--brand), 0 0 16px -4px var(--brand);
+}
+:root[data-theme='dark'] .btn--primary:hover {
+  box-shadow: 0 0 0 1px var(--brand-2), 0 0 22px -2px var(--brand-2);
+}
+:root[data-theme='dark'] :focus-visible {
+  outline-color: var(--focus);
+  box-shadow: 0 0 0 4px rgb(122 247 255 / 25%);
+}
+:root[data-theme='dark'] ::selection {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+:root[data-theme='dark'] .auth-page {
+  background: none;
+}
+
+.motion-toggle {
+  flex-shrink: 0;
+}
+.main-nav .nav-link {
+  white-space: nowrap;
+}
+
+@media print {
+  .matrix-rain {
+    display: none !important;
+  }
+}

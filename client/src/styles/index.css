@@ -49,34 +49,40 @@
   color-scheme: light;
 }
 
-/* Dark theme: set on <html> by the theme script in index.html (Auto, Light or Dark) */
+/* Dark theme, the default "matrix" look: black and phosphor green over the animated digital rain.
+   Set on <html> by the theme script in index.html (Auto, Light or Dark). Surfaces are near-opaque so text stays readable. */
 :root[data-theme='dark'] {
-  --bg: #0d1513;
-  --surface: #131e1b;
-  --surface-2: #1a2723;
-  --surface-3: #22322d;
-  --ink: #eaf1ee;
-  --ink-2: #c5d2cd;
-  --muted: #93a39d;
-  --line: #26352f;
-  --line-strong: #34463f;
-  --brand: #1f9a7d;
-  --brand-2: #34b593;
-  --brand-soft: #143a31;
-  --accent: #f2b544;
-  --accent-soft: #3a2f16;
-  --success: #4cc38a;
-  --success-soft: #133325;
-  --danger: #f2756a;
-  --danger-soft: #3a1a17;
-  --warning: #f0bf5a;
-  --warning-soft: #33290f;
-  --info-soft: #182540;
-  --ring-track: #24332e;
-  --focus: #7cb3ff;
-  --hero-from: #06231d;
-  --hero-to: #0b3f34;
-  --shadow: 0 2px 6px rgb(0 0 0 / 25%), 0 10px 24px -12px rgb(0 0 0 / 50%);
+  --font-display: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --bg: #000000;
+  --surface: rgb(3 12 6 / 92%);
+  --surface-2: rgb(6 20 11 / 92%);
+  --surface-3: #0b2414;
+  --ink: #dcffe8;
+  --ink-2: #b2ecc6;
+  --muted: #7dbb94;
+  --line: #12402a;
+  --line-strong: #1e6a40;
+  --brand: #19e57a;
+  --brand-2: #4dff9c;
+  --brand-ink: #00170a;
+  --brand-soft: #05301a;
+  --accent: #b7ff3c;
+  --accent-ink: #132400;
+  --accent-soft: #1f2e05;
+  --success: #4dff9c;
+  --success-soft: #052e18;
+  --danger: #ff6b86;
+  --danger-soft: #3a0d18;
+  --warning: #ffd36b;
+  --warning-soft: #33280a;
+  --info-soft: #062433;
+  --ring-track: #0f2f1c;
+  --focus: #7af7ff;
+  --hero-from: rgb(0 0 0 / 55%);
+  --hero-to: rgb(0 22 10 / 82%);
+  --glow: 0 0 18px rgb(25 229 122 / 35%);
+  --shadow: 0 2px 6px rgb(0 0 0 / 50%), 0 10px 28px -12px rgb(25 229 122 / 18%);
+  --shadow-lg: 0 24px 48px -20px rgb(25 229 122 / 25%);
   color-scheme: dark;
 }
 
@@ -346,13 +352,15 @@ main:focus {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.menu-toggle {
+/* .icon-btn.menu-toggle outranks the generic .icon-btn display rule defined later */
+.icon-btn.menu-toggle {
   display: none;
   margin-inline-start: auto;
 }
 
-@media (max-width: 960px) {
-  .menu-toggle {
+/* The full navigation needs about 1200px once staff links are shown; below that it moves into the menu */
+@media (max-width: 1200px) {
+  .icon-btn.menu-toggle {
     display: inline-flex;
   }
   .main-nav {

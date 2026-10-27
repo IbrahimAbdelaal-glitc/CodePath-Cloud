@@ -12,6 +12,7 @@ import meRoutes from './routes/me.js';
 import manageRoutes from './routes/manage.js';
 import adminRoutes from './routes/admin.js';
 import certificateRoutes from './routes/certificates.js';
+import courseRoutes from './routes/courses.js';
 
 export function createApp() {
   const app = express();
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/manage', manageRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/certificates', certificateRoutes);
+  app.use('/api/courses', courseRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

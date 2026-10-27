@@ -23,6 +23,8 @@ export default function PathDetail() {
 
   const r = data.roadmap;
   const next = r.modules.flatMap((m) => (m.access.locked && m.access.enforced ? [] : m.lessons)).find((l) => !l.isCompleted);
+  // Video courses open in the course player, which tracks watching, checkpoints and block quizzes
+  const lessonHref = (id) => (r.isSequential ? `/learn/${r.slug}/${id}` : `/lessons/${id}`);
 
   return (
     <div className="page">
@@ -81,7 +83,12 @@ export default function PathDetail() {
                 <p>
                   {t('paths.lessonsDone', { done: fmt.number(r.progress.completed), total: fmt.number(r.progress.total) })}
                 </p>
-                {next ? (
+                {r.isSequential ? (
+                  <Link to={`/learn/${r.slug}`} className="btn btn--accent">
+                    <PlayCircle size={18} aria-hidden="true" />
+                    {r.progress.completed ? t('player.openCourseContinue') : t('player.openCourse')}
+                  </Link>
+                ) : next ? (
                   <Link to={`/lessons/${next.id}`} className="btn btn--accent">
                     <PlayCircle size={18} aria-hidden="true" />
                     {r.progress.completed ? t('path.continue') : t('path.start')}
@@ -108,6 +115,19 @@ export default function PathDetail() {
           </aside>
         </div>
       </section>
+
+      {r.learningOutcomes?.length > 0 && (
+        <section className="container section" aria-labelledby="outcomes-title">
+          <div className="panel">
+            <h2 id="outcomes-title">{t('player.outcomes')}</h2>
+            <ul className="checklist">
+              {r.learningOutcomes.map((o) => (
+                <li key={o}>{o}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       <section className="container section" aria-labelledby="modules-title">
         <h2 id="modules-title">{t('path.modulesTitle')}</h2>
@@ -197,8 +217,8 @@ export default function PathDetail() {
                           ) : (
                             <Link
                               className="lesson-row"
-                              to={user ? `/lessons/${l.id}` : '/login'}
-                              state={user ? undefined : { from: `/lessons/${l.id}` }}
+                              to={user ? lessonHref(l.id) : '/login'}
+                              state={user ? undefined : { from: lessonHref(l.id) }}
                             >
                               {inner}
                             </Link>

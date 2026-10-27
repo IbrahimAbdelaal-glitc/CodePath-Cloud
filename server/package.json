@@ -18,12 +18,15 @@
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "create-admin": "node scripts/create-admin.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "check:catalog": "node scripts/check-catalog.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1157.0",
+    "@aws-sdk/s3-request-presigner": "^3.1157.0",
     "@prisma/client": "6.19.3",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

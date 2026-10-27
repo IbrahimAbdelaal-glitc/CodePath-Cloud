@@ -4,12 +4,14 @@ import { api } from '../api/client.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import CodeBlock from './CodeBlock.jsx';
 import { Alert } from './States.jsx';
+import AnswerInput, { answerPayload, isAnswered } from './AnswerInput.jsx';
 
 // Interactive question: the correct answer only reaches the browser after the server grades an attempt
 export default function QuizCard({ quiz, index, onResult }) {
   const { t, fmt } = useI18n();
   const id = useId();
-  const [answer, setAnswer] = useState('');
+  const isMulti = quiz.questionType === 'MULTI_SELECT';
+  const [answer, setAnswer] = useState(isMulti ? [] : '');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -20,14 +22,14 @@ export default function QuizCard({ quiz, index, onResult }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!answer.trim()) {
+    if (!isAnswered(quiz, answer)) {
       setError(hasOptions ? t('quiz.chooseFirst') : t('quiz.writeFirst'));
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      const { result: r } = await api(`/api/quizzes/${quiz.id}/attempts`, { method: 'POST', body: { answer } });
+      const { result: r } = await api(`/api/quizzes/${quiz.id}/attempts`, { method: 'POST', body: { answer: answerPayload(quiz, answer) } });
       setResult(r);
       setAttempts((a) => [r.attempt, ...a].slice(0, 10));
       onResult?.(r);
@@ -40,7 +42,7 @@ export default function QuizCard({ quiz, index, onResult }) {
 
   const retry = () => {
     setResult(null);
-    setAnswer('');
+    setAnswer(isMulti ? [] : '');
     setError(null);
   };
 
@@ -66,7 +68,15 @@ export default function QuizCard({ quiz, index, onResult }) {
       )}
 
       <form onSubmit={submit} noValidate>
-        {hasOptions ? (
+        {isMulti ? (
+          <AnswerInput
+            question={{ ...quiz, codeSnippet: null }}
+            value={answer}
+            onChange={setAnswer}
+            disabled={Boolean(result) || submitting}
+            review={result ? { correctAnswer: result.correctAnswer } : null}
+          />
+        ) : hasOptions ? (
           <fieldset className="options" disabled={Boolean(result) || submitting}>
             <legend className="sr-only">{t('quiz.choices')}</legend>
             {quiz.options.map((opt, i) => {
@@ -151,7 +161,7 @@ export default function QuizCard({ quiz, index, onResult }) {
               {result.isCorrect ? t('quiz.correct', { n: fmt.number(result.score) }) : t('quiz.incorrect')}
             </strong>
           </div>
-          {!result.isCorrect && (
+          {!result.isCorrect && !isMulti && (
             <p className="feedback__answer">
               {t('quiz.correctAnswer')}{' '}
               <code className="inline-code" dir="ltr">

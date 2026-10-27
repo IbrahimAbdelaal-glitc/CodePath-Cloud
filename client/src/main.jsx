@@ -7,6 +7,8 @@ import { ToastProvider } from './context/ToastContext.jsx';
 import App from './App.jsx';
 import './styles/index.css';
 import './styles/code.css';
+import './styles/matrix.css';
+import './styles/player.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -1,5 +1,9 @@
-// Outgoing email. Uses SMTP when SMTP_HOST is set.
-// In development without SMTP, messages are written to server/.dev-mail/ instead of being sent,
+// Outgoing email. Transports, in order of preference:
+//   1. Resend HTTPS API (RESEND_API_KEY)
+//   2. Brevo HTTPS API (BREVO_API_KEY)
+//   3. SMTP (SMTP_HOST). Note: Render's free web services block outbound SMTP ports 25/465/587,
+//      so on that plan use one of the HTTPS APIs above.
+// In development without any of these, messages are written to server/.dev-mail/ instead of being sent,
 // so the reset flow can be tested without exposing tokens in API responses or logs.
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,26 +12,77 @@ import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 
 const devMailDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.dev-mail');
+const { mail } = config;
 
 let transporter = null;
-if (config.mail.smtpHost) {
+if (!mail.resendApiKey && !mail.brevoApiKey && mail.smtpHost) {
   transporter = nodemailer.createTransport({
-    host: config.mail.smtpHost,
-    port: config.mail.smtpPort,
-    secure: config.mail.smtpSecure,
-    auth: config.mail.smtpUser ? { user: config.mail.smtpUser, pass: config.mail.smtpPass } : undefined,
+    host: mail.smtpHost,
+    port: mail.smtpPort,
+    secure: mail.smtpSecure,
+    auth: mail.smtpUser ? { user: mail.smtpUser, pass: mail.smtpPass } : undefined,
   });
 }
 
-export const mailMode = transporter ? 'smtp' : config.isProduction ? 'disabled' : 'dev-outbox';
+export const mailMode = mail.resendApiKey
+  ? 'resend'
+  : mail.brevoApiKey
+    ? 'brevo'
+    : transporter
+      ? 'smtp'
+      : config.isProduction
+        ? 'disabled'
+        : 'dev-outbox';
+
+// "CodePath Cloud <no-reply@example.com>" → { name, email }
+export function parseAddress(value) {
+  const m = String(value).match(/^\s*(?:"?([^"<]*?)"?\s*)?<([^>]+)>\s*$/);
+  return m ? { name: m[1]?.trim() || undefined, email: m[2].trim() } : { email: String(value).trim() };
+}
+
+async function postJson(url, headers, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    // Provider error bodies describe configuration problems (unverified sender, bad key); they never contain the message
+    const detail = (await res.text().catch(() => '')).slice(0, 300);
+    throw new Error(`Email provider responded ${res.status}: ${detail}`);
+  }
+  return res.json().catch(() => ({}));
+}
 
 export async function sendMail({ to, subject, text, html }) {
+  if (mail.resendApiKey) {
+    await postJson('https://api.resend.com/emails', { Authorization: `Bearer ${mail.resendApiKey}` }, {
+      from: mail.from,
+      to: [to],
+      subject,
+      text,
+      html,
+    });
+    return;
+  }
+  if (mail.brevoApiKey) {
+    const sender = parseAddress(mail.from);
+    await postJson('https://api.brevo.com/v3/smtp/email', { 'api-key': mail.brevoApiKey }, {
+      sender,
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+      htmlContent: html,
+    });
+    return;
+  }
   if (transporter) {
-    await transporter.sendMail({ from: config.mail.from, to, subject, text, html });
+    await transporter.sendMail({ from: mail.from, to, subject, text, html });
     return;
   }
   if (config.isProduction) {
-    throw new Error('Email is not configured: set SMTP_HOST and related variables');
+    throw new Error('Email is not configured: set RESEND_API_KEY or BREVO_API_KEY (or SMTP_HOST on a plan that allows SMTP)');
   }
   await mkdir(devMailDir, { recursive: true });
   const file = path.join(devMailDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.html`);

@@ -7,7 +7,13 @@ import { prisma } from '../lib/prisma.js';
 const roadmapSelect = {
   id: true,
   title: true,
-  modules: { select: { lessons: { select: { id: true, quizzes: { select: { id: true } } } } } },
+  modules: {
+    select: {
+      id: true,
+      _count: { select: { blockQuestions: true } },
+      lessons: { select: { id: true, quizzes: { select: { id: true } } } },
+    },
+  },
 };
 
 async function createCertificate(userId, roadmap, lessons, progressByLesson) {
@@ -72,7 +78,8 @@ async function createCertificate(userId, roadmap, lessons, progressByLesson) {
 }
 
 // Issues certificates for every completed path that does not have one yet (optionally limited to some paths).
-// Same completion rule as path progress: every lesson in the path is marked complete.
+// Same completion rule as path progress: every lesson in the path is marked complete,
+// and every module that has a block quiz has a passed attempt.
 // Only students earn certificates; instructors and admins bypass module locks.
 export async function issueCertificates(user, roadmapIds) {
   if (user.role !== 'STUDENT') return [];
@@ -93,11 +100,21 @@ export async function issueCertificates(user, roadmapIds) {
     select: { lessonId: true, completedAt: true, updatedAt: true },
   });
   const progressByLesson = new Map(progress.map((p) => [p.lessonId, p]));
+  const quizModuleIds = roadmaps.flatMap((r) => r.modules.filter((m) => m._count.blockQuestions > 0).map((m) => m.id));
+  const passed = quizModuleIds.length
+    ? await prisma.blockQuizAttempt.findMany({
+        where: { userId: user.id, passed: true, moduleId: { in: quizModuleIds } },
+        distinct: ['moduleId'],
+        select: { moduleId: true },
+      })
+    : [];
+  const passedSet = new Set(passed.map((a) => a.moduleId));
 
   const issued = [];
   for (const r of roadmaps) {
     const lessons = r.modules.flatMap((m) => m.lessons);
     if (!lessons.length || !lessons.every((l) => progressByLesson.has(l.id))) continue;
+    if (r.modules.some((m) => m._count.blockQuestions > 0 && !passedSet.has(m.id))) continue;
     const certificate = await createCertificate(user.id, r, lessons, progressByLesson);
     if (certificate) issued.push(certificate);
   }

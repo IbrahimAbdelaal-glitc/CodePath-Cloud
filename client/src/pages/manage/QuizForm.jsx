@@ -5,6 +5,15 @@ import { Alert } from '../../components/States.jsx';
 import { FieldError, fieldErrors } from './RoadmapForm.jsx';
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+const TYPES = ['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT', 'CODE_OUTPUT', 'FILL_IN_THE_BLANK'];
+const parseList = (v) => {
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+};
 
 // Create/edit question form. Only editors see the correct answer (the server checks permissions)
 export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLabel, defaultOrder }) {
@@ -21,14 +30,20 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
     topicName: '',
     points: initial?.points ?? 10,
     order: initial?.order || defaultOrder || '',
+    placement: initial?.placement || 'LESSON',
+    triggerSeconds: initial?.triggerSeconds ?? '',
+    needsReview: Boolean(initial?.needsReview),
   });
+  const [multiAnswer, setMultiAnswer] = useState(() => (initial?.questionType === 'MULTI_SELECT' ? parseList(initial.correctAnswer) : []));
   const [newTopic, setNewTopic] = useState(topics.length === 0);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const errs = fieldErrors(error);
-  const options = lines(form.options);
-  const needsCode = form.questionType !== 'MULTIPLE_CHOICE';
+  const isTF = form.questionType === 'TRUE_FALSE';
+  const isMulti = form.questionType === 'MULTI_SELECT';
+  const options = isTF ? ['True', 'False'] : lines(form.options);
+  const needsCode = form.questionType === 'CODE_OUTPUT' || form.questionType === 'FILL_IN_THE_BLANK';
   const uid = initial?.id || 'new';
 
   const submit = async (e) => {
@@ -41,7 +56,14 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
         questionType: form.questionType,
         codeSnippet: form.codeSnippet || null,
         options,
-        correctAnswer: form.questionType === 'CODE_OUTPUT' && !options.length ? form.correctAnswer : form.correctAnswer.trim(),
+        correctAnswer: isMulti
+          ? JSON.stringify(multiAnswer.filter((o) => options.includes(o)))
+          : form.questionType === 'CODE_OUTPUT' && !options.length
+            ? form.correctAnswer
+            : form.correctAnswer.trim(),
+        placement: form.placement,
+        triggerSeconds: form.placement === 'CHECKPOINT' && form.triggerSeconds !== '' ? Number(form.triggerSeconds) : null,
+        needsReview: form.needsReview,
         acceptedAnswers: lines(form.acceptedAnswers),
         explanation: form.explanation,
         topicTag: form.topicTag.trim(),
@@ -61,7 +83,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
       <div className="field">
         <label htmlFor={`qt-${uid}`}>{t('manage.questionType')}</label>
         <select id={`qt-${uid}`} className="input" value={form.questionType} onChange={set('questionType')}>
-          {['MULTIPLE_CHOICE', 'CODE_OUTPUT', 'FILL_IN_THE_BLANK'].map((x) => (
+          {TYPES.map((x) => (
             <option key={x} value={x}>
               {t(`questionType.${x}`)}
             </option>
@@ -79,6 +101,21 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
         <span className="hint">{t('manage.questionOrderHint')}</span>
         <FieldError errors={errs} name="order" />
       </div>
+      <div className="field">
+        <label htmlFor={`qpl-${uid}`}>{t('manage.placement')}</label>
+        <select id={`qpl-${uid}`} className="input" value={form.placement} onChange={set('placement')}>
+          <option value="LESSON">{t('manage.placementLesson')}</option>
+          <option value="CHECKPOINT">{t('manage.placementCheckpoint')}</option>
+        </select>
+      </div>
+      {form.placement === 'CHECKPOINT' && (
+        <div className="field">
+          <label htmlFor={`qts-${uid}`}>{t('manage.triggerSeconds')}</label>
+          <input id={`qts-${uid}`} type="number" min="0" className="input" value={form.triggerSeconds} onChange={set('triggerSeconds')} />
+          <span className="hint">{t('manage.triggerHint')}</span>
+          <FieldError errors={errs} name="triggerSeconds" />
+        </div>
+      )}
       <div className="field field--full">
         <label htmlFor={`qq-${uid}`}>{t('manage.questionText')}</label>
         <textarea id={`qq-${uid}`} className="input" rows={2} value={form.question} onChange={set('question')} />
@@ -92,7 +129,7 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
           <FieldError errors={errs} name="codeSnippet" />
         </div>
       )}
-      {form.questionType !== 'FILL_IN_THE_BLANK' && (
+      {form.questionType !== 'FILL_IN_THE_BLANK' && !isTF && (
         <div className="field field--full">
           <label htmlFor={`qo-${uid}`}>
             {t('manage.options')} {form.questionType === 'CODE_OUTPUT' && <small className="muted">({t('common.optional')})</small>}
@@ -103,8 +140,24 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
         </div>
       )}
       <div className="field field--full">
-        <label htmlFor={`qa-${uid}`}>{t('manage.correctAnswer')}</label>
-        {options.length > 0 && form.questionType !== 'FILL_IN_THE_BLANK' ? (
+        <label htmlFor={`qa-${uid}`} id={`qa-${uid}-l`}>
+          {isMulti ? t('manage.correctAnswers') : t('manage.correctAnswer')}
+        </label>
+        {isMulti ? (
+          <div className="checks" role="group" aria-labelledby={`qa-${uid}-l`}>
+            {options.map((o) => (
+              <label key={o} className="check">
+                <input
+                  type="checkbox"
+                  checked={multiAnswer.includes(o)}
+                  onChange={() => setMultiAnswer((a) => (a.includes(o) ? a.filter((x) => x !== o) : [...a, o]))}
+                />{' '}
+                {o}
+              </label>
+            ))}
+            {!options.length && <span className="hint">{t('manage.addOptionsFirst')}</span>}
+          </div>
+        ) : options.length > 0 && form.questionType !== 'FILL_IN_THE_BLANK' ? (
           <select id={`qa-${uid}`} className="input" value={form.correctAnswer} onChange={set('correctAnswer')}>
             <option value="">{t('manage.pickCorrect')}</option>
             {options.map((o) => (
@@ -133,6 +186,10 @@ export default function QuizForm({ initial, topics, onSubmit, onCancel, submitLa
         <textarea id={`qe-${uid}`} className="input" rows={3} value={form.explanation} onChange={set('explanation')} />
         <FieldError errors={errs} name="explanation" />
       </div>
+      <label className="check field--full">
+        <input type="checkbox" checked={form.needsReview} onChange={(e) => setForm({ ...form, needsReview: e.target.checked })} />{' '}
+        {t('manage.needsReviewCheck')}
+      </label>
       <fieldset className="field field--full">
         <legend>{t('manage.topic')}</legend>
         <span className="hint">{t('manage.topicHint')}</span>
