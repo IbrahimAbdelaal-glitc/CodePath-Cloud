@@ -208,7 +208,7 @@ Recommended order: **database → API → web app → update CORS**.
 **Vercel:**
 1. **Add New → Project** and select the repository.
 2. **Root Directory:** `client` (Vite is detected automatically, and `vercel.json` handles client-side routing).
-3. Add the environment variable `VITE_API_URL` = your API URL, e.g. `https://codepath-api.onrender.com` (no trailing `/`).
+3. Add the environment variable `VITE_API_URL` = your API's URL, copied from the Render dashboard, e.g. `https://<your-api-service>.onrender.com` (no trailing `/`). Render may add a suffix to the service name, so always copy the exact address.
 4. Deploy.
 
 **Netlify:**
@@ -223,7 +223,7 @@ Recommended order: **database → API → web app → update CORS**.
 On the API, set `CORS_ORIGIN` to the exact web app origin. You can list several origins, comma-separated:
 
 ```
-CORS_ORIGIN=https://codepath.vercel.app,https://www.codepath.example
+CORS_ORIGIN=https://<your-site>.vercel.app,https://www.<your-domain>
 ```
 
 ## Deploying with Docker
