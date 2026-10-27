@@ -5,6 +5,7 @@ import { notFound } from '../lib/errors.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { computeModuleAccess, roadmapVisibilityWhere } from '../services/learning.js';
 import { issueCertificates } from '../services/certificates.js';
+import { videoTimes } from '../services/coursePlayer.js';
 
 const router = Router();
 
@@ -15,8 +16,16 @@ const lessonSummarySelect = {
   order: true,
   difficulty: true,
   estimatedMinutes: true,
+  videoProvider: true,
+  videoStart: true,
+  videoEnd: true,
+  videoDurationSeconds: true,
   _count: { select: { quizzes: true } },
 };
+
+const VIDEO_FIELDS = { videoProvider: true, videoStart: true, videoEnd: true, videoDurationSeconds: true };
+// Seconds of video a set of lessons plays (a clip counts its played length), kept apart from estimated time
+const videoSecondsOf = (lessons) => lessons.reduce((sum, l) => sum + (videoTimes(l)?.seconds || 0), 0);
 
 function sumMinutes(modules) {
   return modules.reduce(
@@ -58,7 +67,7 @@ router.get('/', optionalAuth, async (req, res) => {
           timeEstimate: true,
           learningOutcomes: true,
           linkedRoadmapIds: true,
-          lessons: { select: { id: true, estimatedMinutes: true } },
+          lessons: { select: { id: true, estimatedMinutes: true, ...VIDEO_FIELDS } },
         },
       },
     },
@@ -95,6 +104,7 @@ router.get('/', optionalAuth, async (req, res) => {
         moduleCount: r.modules.length,
         lessonCount: lessonIds.length,
         estimatedMinutes: sumMinutes(r.modules),
+        videoSeconds: videoSecondsOf(r.modules.flatMap((m) => m.lessons)),
         stages: stageModules.length > 1 ? stageModules.map((m) => ({ title: m.title, time: m.timeEstimate })) : null,
         progress: req.user
           ? { completed, total: lessonIds.length, percent: lessonIds.length ? Math.round((completed / lessonIds.length) * 100) : 0 }
@@ -133,8 +143,9 @@ router.get('/:slug', optionalAuth, async (req, res) => {
   const bookmarkSet = new Set(bookmarks.map((b) => b.lessonId));
 
   const modules = roadmap.modules.map((m) => {
-    const lessons = m.lessons.map(({ _count, ...l }) => ({
+    const lessons = m.lessons.map(({ _count, videoProvider, videoStart, videoEnd, videoDurationSeconds, ...l }) => ({
       ...l,
+      video: videoTimes({ videoProvider, videoStart, videoEnd, videoDurationSeconds }),
       quizCount: _count.quizzes,
       isCompleted: completedSet.has(l.id),
       isBookmarked: bookmarkSet.has(l.id),
@@ -148,6 +159,7 @@ router.get('/:slug', optionalAuth, async (req, res) => {
       order: m.order,
       difficulty: m.difficulty,
       estimatedMinutes: lessons.reduce((s, l) => s + (l.estimatedMinutes || 0), 0) || m.estimatedMinutes,
+      videoSeconds: videoSecondsOf(m.lessons),
       lessons,
       progress: { completed, total: lessons.length },
       access: {
@@ -185,6 +197,7 @@ router.get('/:slug', optionalAuth, async (req, res) => {
       learningOutcomes: roadmap.learningOutcomes,
       instructors: roadmap.instructors.map((i) => i.user),
       estimatedMinutes: sumMinutes(roadmap.modules),
+      videoSeconds: videoSecondsOf(roadmap.modules.flatMap((m) => m.lessons)),
       lessonCount: lessonIds.length,
       progress: userId
         ? { completed, total: lessonIds.length, percent: lessonIds.length ? Math.round((completed / lessonIds.length) * 100) : 0 }

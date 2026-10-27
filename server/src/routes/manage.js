@@ -9,6 +9,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { difficulty, httpUrl, idParams, slug, topicTag, uuid } from '../lib/validation.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { config } from '../config.js';
+import { youtubeRuntime } from '../lib/youtubeRuntime.js';
 import { deleteObject, headObject, presignUpload, storageConfigured, UPLOAD_URL_SECONDS } from '../lib/storage.js';
 
 const router = Router();
@@ -115,11 +116,35 @@ const clipOrder = [
 const lessonSchema = lessonFields.refine(...clipOrder);
 const lessonPatchSchema = lessonFields.partial().refine(...clipOrder);
 
-// A YouTube id in the body switches the lesson to YouTube; an empty one removes a YouTube video
-function videoFields(data) {
-  if (!('youtubeId' in data)) return data;
-  const { youtubeId: id, ...rest } = data;
-  return id ? { ...rest, youtubeId: id, videoProvider: 'YOUTUBE' } : { ...rest, youtubeId: null };
+const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+// A YouTube id in the body switches the lesson to YouTube; an empty one removes a YouTube video.
+// The video's runtime is never taken from the form: the server reads it from the video's page when the video is
+// added or changed (null, shown as "runtime unavailable", when it cannot be verified), and a clip may not end after it.
+// Uploaded files get their runtime from the file itself in the upload flow.
+async function videoFields(data, existing = null) {
+  const { videoDurationSeconds: _ignored, ...rest } = data;
+  let out = rest;
+  let runtime = existing?.videoDurationSeconds ?? null;
+  if ('youtubeId' in rest) {
+    const { youtubeId: id, ...others } = rest;
+    if (!id) {
+      out = { ...others, youtubeId: null, ...(existing?.videoProvider === 'YOUTUBE' ? { videoDurationSeconds: null } : {}) };
+      runtime = null;
+    } else {
+      out = { ...others, youtubeId: id, videoProvider: 'YOUTUBE' };
+      if (id !== existing?.youtubeId || existing?.videoProvider !== 'YOUTUBE' || runtime == null) {
+        runtime = (await youtubeRuntime(id)).seconds;
+        out.videoDurationSeconds = runtime;
+      }
+    }
+  }
+  const end = 'videoEnd' in out ? out.videoEnd : existing?.videoEnd;
+  const provider = out.videoProvider ?? existing?.videoProvider;
+  if (provider === 'YOUTUBE' && runtime != null && end != null && end > runtime + 1) {
+    throw badRequest(`The clip ends at ${clock(end)}, but the video is only ${clock(runtime)} long`, { field: 'videoEnd' });
+  }
+  return out;
 }
 
 const quizSchema = z
@@ -389,9 +414,10 @@ router.post('/modules/:id/lessons', async (req, res) => {
   assertCanAddContent(req.user, await roadmapOfModule(moduleId));
   const { resources = [], ...data } = lessonSchema.parse(req.body);
   const last = await prisma.lesson.findFirst({ where: { moduleId }, orderBy: { order: 'desc' } });
+  const video = await videoFields(data);
   const lesson = await prisma.lesson.create({
     data: {
-      ...videoFields(data),
+      ...video,
       moduleId,
       order: (last?.order ?? 0) + 1,
       resources: { create: resources.map((r, i) => ({ ...r, order: i })) },
@@ -419,7 +445,11 @@ router.get('/lessons/:id', async (req, res) => {
 router.patch('/lessons/:id', async (req, res) => {
   const { id } = idParams.parse(req.params);
   await assertCanManage(req.user, await roadmapOfLesson(id));
-  const { resources, ...data } = videoFields(lessonPatchSchema.parse(req.body));
+  const existing = await prisma.lesson.findUnique({
+    where: { id },
+    select: { youtubeId: true, videoProvider: true, videoEnd: true, videoDurationSeconds: true },
+  });
+  const { resources, ...data } = await videoFields(lessonPatchSchema.parse(req.body), existing);
   const lesson = await prisma.$transaction(async (tx) => {
     if (resources) {
       await tx.lessonResource.deleteMany({ where: { lessonId: id } });

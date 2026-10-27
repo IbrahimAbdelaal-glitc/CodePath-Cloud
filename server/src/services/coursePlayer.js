@@ -20,6 +20,18 @@ export function videoDuration(lesson) {
   return lesson.videoDurationSeconds || null;
 }
 
+// The three durations a lesson's video has, kept apart everywhere they are shown:
+//   seconds         what the lesson plays (the clip, or the whole video)
+//   runtimeSeconds  the full video's runtime: verified from the video page for YouTube, read from the file for
+//                   uploads; null when it could not be verified (shown as "runtime unavailable", never estimated)
+//   isClip          the lesson plays only part of the video
+// A lesson's estimatedMinutes is the time to complete it, which is a separate number.
+export function videoTimes(lesson) {
+  if (!lesson.videoProvider) return null;
+  const isClip = lesson.videoProvider === 'YOUTUBE' && lesson.videoStart != null && lesson.videoEnd != null;
+  return { seconds: videoDuration(lesson), runtimeSeconds: lesson.videoDurationSeconds || null, isClip };
+}
+
 export const hasVideo = (lesson) => Boolean(lesson.videoProvider) && Boolean(videoDuration(lesson));
 const segmentCount = (duration) => Math.max(1, Math.ceil(duration / SEGMENT_SECONDS));
 

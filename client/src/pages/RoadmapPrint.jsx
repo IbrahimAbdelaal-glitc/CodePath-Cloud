@@ -4,6 +4,7 @@ import { apiUrl } from '../api/client.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { useFetch } from '../lib/useFetch.js';
 import Markdown from '../components/Markdown.jsx';
+import { videoLabel } from '../lib/videoTimes.js';
 import { ErrorState, PageSkeleton } from '../components/States.jsx';
 
 // Print-friendly roadmap. Built from the same handout data as the PDF (/api/courses/:slug/handout), so the two match.
@@ -12,7 +13,7 @@ const ACCESS = { FREE: 'Free', ACCOUNT: 'Free account', PAID: 'Paid' };
 
 export default function RoadmapPrint() {
   const { slug } = useParams();
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const { data, error, loading, reload } = useFetch(`/api/courses/${encodeURIComponent(slug)}/handout`);
 
   if (loading) return <PageSkeleton />;
@@ -119,8 +120,11 @@ export default function RoadmapPrint() {
                 {s.lessons.map((l) => (
                   <li key={l.url}>
                     <a href={l.url}>{l.title}</a>
-                    {l.minutes ? ` · ${l.minutes} min` : ''}
-                    {l.video ? ` · ${t('print.questions', { n: l.questions })}` : ` · ${t('print.reading')}`}
+                    {' · '}
+                    {l.video
+                      ? `${videoLabel(t, fmt, { seconds: l.videoSeconds, runtimeSeconds: l.runtimeSeconds, isClip: l.isClip })} · ${t('print.questions', { n: l.questions })}`
+                      : t('print.reading')}
+                    {l.minutes ? ` · ${t('print.toComplete', { d: fmt.duration(l.minutes) })}` : ''}
                     {l.credit && (
                       <span className="small muted print-doc__credit">
                         {t('print.video')}: {l.credit}

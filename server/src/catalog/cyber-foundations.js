@@ -16,7 +16,7 @@ const clip = (id, start, end) => youtube(id, { start, end, credit: CREDIT });
 export default {
   key: 'cyber-foundations',
   // v2: 80% pass marks on in-video questions and block quizzes
-  version: 2,
+  version: 3,
   topics: {
     'cyber-accounts': 'Securing accounts',
     'cyber-data': 'Securing data',

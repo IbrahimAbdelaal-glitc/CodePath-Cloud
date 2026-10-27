@@ -12,7 +12,7 @@ const tx = (title) => `Professor Messer transcript, "${title}"`;
 export default {
   key: 'security-governance',
   // v2: 80% pass marks on in-video questions and block quizzes
-  version: 2,
+  version: 3,
   topics: {
     'gov-architecture': 'Secure architecture',
     'gov-data': 'Data protection and resilience',

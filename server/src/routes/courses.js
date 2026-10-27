@@ -16,6 +16,7 @@ import {
   startBlockQuiz,
   submitBlockQuiz,
   videoDuration,
+  videoTimes,
   watchedPercent,
 } from '../services/coursePlayer.js';
 
@@ -126,13 +127,17 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
             : 'AVAILABLE';
       previousDone = completed;
       const duration = videoDuration(l);
+      const times = videoTimes(l);
       return {
         id: l.id,
         title: l.title,
         summary: l.summary,
         estimatedMinutes: l.estimatedMinutes,
         hasVideo: Boolean(l.videoProvider),
+        // What the lesson plays; the full video's verified runtime is separate (null when unavailable)
         durationSeconds: duration,
+        videoRuntimeSeconds: times?.runtimeSeconds ?? null,
+        isClip: Boolean(times?.isClip),
         checkpoints: l._count.quizzes,
         watchedPercent: watchedPercent(watch, duration),
         lastWatchedAt: watch?.updatedAt || null,
@@ -204,6 +209,8 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
       reasons: user ? a.reasons : [],
       skipped,
       progress: { completed: lessons.filter((l) => l.state === 'COMPLETED').length, total: lessons.length },
+      // Total video the block plays (clips count their played length), apart from its estimated time
+      videoSeconds: lessons.reduce((sum, l) => sum + (l.durationSeconds || 0), 0),
       lessons,
       quiz,
       linkedCourses,

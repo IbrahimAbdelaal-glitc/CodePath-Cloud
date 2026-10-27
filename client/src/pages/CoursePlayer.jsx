@@ -35,9 +35,9 @@ import Markdown from '../components/Markdown.jsx';
 import VideoPlayer from '../components/VideoPlayer.jsx';
 import CheckpointCard from '../components/CheckpointCard.jsx';
 import RoadmapMap, { isStage, useHashTarget } from '../components/RoadmapMap.jsx';
+import { clockTime, minutesOf, videoLabel, videoShort } from '../lib/videoTimes.js';
 import VideoUploadDialog from '../components/VideoUploadDialog.jsx';
 
-export const minutesFrom = (seconds) => (seconds ? Math.max(1, Math.round(seconds / 60)) : null);
 
 const STATE_ICON = {
   COMPLETED: CheckCircle2,
@@ -108,7 +108,11 @@ export function CourseOutline({ course, currentId, onNavigate }) {
                         <Icon size={17} className="outline__icon" aria-hidden="true" />
                         <span className="outline__title">{l.title}</span>
                         <span className="outline__meta">
-                          {l.durationSeconds ? fmt.duration(minutesFrom(l.durationSeconds)) : null}
+                          {l.hasVideo ? (
+                            <span title={videoLabel(t, fmt, { seconds: l.durationSeconds, runtimeSeconds: l.videoRuntimeSeconds, isClip: l.isClip })}>
+                              {videoShort(t, fmt, { seconds: l.durationSeconds, runtimeSeconds: l.videoRuntimeSeconds, isClip: l.isClip })}
+                            </span>
+                          ) : null}
                           {l.state === 'IN_PROGRESS' && l.watchedPercent > 0 ? ` · ${l.watchedPercent}%` : ''}
                         </span>
                         <span className="sr-only">{t(`player.state.${l.state}`)}</span>
@@ -384,6 +388,11 @@ export function StageCard({ course, stage: m, open }) {
       {m.timeEstimate && (
         <p className="small">
           <Clock size={15} aria-hidden="true" /> <strong>{t('player.stageTime')}:</strong> {m.timeEstimate}
+        </p>
+      )}
+      {m.videoSeconds > 0 && (
+        <p className="small">
+          <PlayCircle size={15} aria-hidden="true" /> {t('video.total', { d: fmt.duration(minutesOf(m.videoSeconds)) })}
         </p>
       )}
       {m.locked && m.reasons.length > 0 && (
@@ -754,6 +763,14 @@ function LessonView({ course, lessonId, onCourseChanged }) {
             {module?.title} · {t('player.lessonOf', { n: fmt.number(index + 1), total: fmt.number(steps.length) })}
           </p>
           <h1 id="lesson-title">{lesson.title}</h1>
+          {lesson.video && (
+            <p className="small video-runtime">
+              {videoLabel(t, fmt, { seconds: lesson.video.duration, runtimeSeconds: lesson.video.runtimeSeconds, isClip: lesson.video.isClip })}
+              {lesson.video.isClip && lesson.video.end != null && (
+                <> · {t('video.plays', { from: clockTime(lesson.video.start ?? 0), to: clockTime(lesson.video.end) })}</>
+              )}
+            </p>
+          )}
           {lesson.video?.credit && (
             <p className="small muted video-credit">
               {t('player.videoBy', { credit: lesson.video.credit })}{' '}

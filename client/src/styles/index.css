@@ -1190,9 +1190,18 @@ textarea.input {
   min-width: 0;
 }
 .field label,
+.field .label,
 .field legend {
   font-weight: 600;
   font-size: 0.92rem;
+}
+/* A value the form shows but does not let you edit (for example a verified video runtime) */
+.input--static {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  background: var(--surface-3);
+  color: var(--ink-2);
 }
 fieldset.field {
   border: 0;

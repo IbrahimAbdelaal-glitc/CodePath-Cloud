@@ -27,7 +27,6 @@ function toForm(lesson) {
     youtubeId: lesson?.youtubeId || '',
     videoStart: lesson?.videoStart ?? '',
     videoEnd: lesson?.videoEnd ?? '',
-    videoDurationSeconds: lesson?.videoDurationSeconds ?? '',
     videoCredit: lesson?.videoCredit || '',
     videoSourceUrl: lesson?.videoSourceUrl || '',
   };
@@ -89,7 +88,6 @@ export default function LessonEditor() {
       resources: form.resources.filter((r) => r.title || r.url),
       videoStart: num(form.videoStart),
       videoEnd: num(form.videoEnd),
-      videoDurationSeconds: num(form.videoDurationSeconds),
       videoCredit: form.videoCredit.trim() || null,
       videoSourceUrl: form.videoSourceUrl.trim() || null,
     };
@@ -307,9 +305,11 @@ export default function LessonEditor() {
                 <FieldError errors={errs} name="youtubeId" />
               </div>
               <div className="field">
-                <label htmlFor="l-vdur">{t('manage.videoDuration')}</label>
-                <input id="l-vdur" type="number" min="1" className="input" value={form.videoDurationSeconds} onChange={set('videoDurationSeconds')} />
-                <FieldError errors={errs} name="videoDurationSeconds" />
+                <span className="label" id="l-vdur">{t('video.runtimeLabel')}</span>
+                <p className="input input--static" aria-labelledby="l-vdur">
+                  {lesson?.videoDurationSeconds ? fmt.duration(Math.max(1, Math.round(lesson.videoDurationSeconds / 60))) : t('video.unavailableShort')}
+                </p>
+                <p className="small muted">{t('video.runtimeAuto')}</p>
               </div>
               <div className="field">
                 <label htmlFor="l-vs">{t('manage.videoStart')}</label>

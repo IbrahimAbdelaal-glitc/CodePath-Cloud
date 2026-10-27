@@ -8,6 +8,7 @@ import LockNotice from '../components/LockNotice.jsx';
 import { ErrorState, PageSkeleton } from '../components/States.jsx';
 import RoadmapMap, { isStage, useHashTarget } from '../components/RoadmapMap.jsx';
 import { StageCard } from './CoursePlayer.jsx';
+import { minutesOf, videoLabel, videoShort } from '../lib/videoTimes.js';
 
 export default function PathDetail() {
   const { slug } = useParams();
@@ -61,8 +62,13 @@ export default function PathDetail() {
                 <ListChecks size={16} aria-hidden="true" /> {fmt.count('lessons', r.lessonCount)}
               </span>
               <span>
-                <Clock size={16} aria-hidden="true" /> {fmt.duration(r.estimatedMinutes)}
+                <Clock size={16} aria-hidden="true" /> <span className="sr-only">{t('video.estimated')}:</span> {fmt.duration(r.estimatedMinutes)}
               </span>
+              {r.videoSeconds > 0 && (
+                <span>
+                  <PlayCircle size={16} aria-hidden="true" /> {t('video.total', { d: fmt.duration(minutesOf(r.videoSeconds)) })}
+                </span>
+              )}
               {r.instructors.length > 0 && (
                 <span>
                   <Users size={16} aria-hidden="true" /> {r.instructors.map((i) => i.name).join(t('common.listSep'))}
@@ -172,8 +178,13 @@ export default function PathDetail() {
                     <div className="module__meta">
                       <DifficultyBadge level={m.difficulty} />
                       <span>
-                        <Clock size={15} aria-hidden="true" /> {fmt.duration(m.estimatedMinutes)}
+                        <Clock size={15} aria-hidden="true" /> <span className="sr-only">{t('video.estimated')}:</span> {fmt.duration(m.estimatedMinutes)}
                       </span>
+                      {m.videoSeconds > 0 && (
+                        <span>
+                          <PlayCircle size={15} aria-hidden="true" /> {t('video.total', { d: fmt.duration(minutesOf(m.videoSeconds)) })}
+                        </span>
+                      )}
                     </div>
                   </header>
 
@@ -222,7 +233,11 @@ export default function PathDetail() {
                           <span className="lesson-row__meta">
                             {l.isBookmarked && <Bookmark size={14} aria-label={t('lesson.bookmarked')} />}
                             {l.quizCount > 0 && <span>{fmt.count('questions', l.quizCount)}</span>}
-                            <span>{fmt.duration(l.estimatedMinutes)}</span>
+                            {l.video ? (
+                              <span title={videoLabel(t, fmt, l.video)}>{videoShort(t, fmt, l.video)}</span>
+                            ) : (
+                              <span>{fmt.duration(l.estimatedMinutes)}</span>
+                            )}
                           </span>
                         </>
                       );

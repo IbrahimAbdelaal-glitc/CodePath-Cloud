@@ -15,6 +15,7 @@ import {
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { ProgressBar } from './Badges.jsx';
 import RoadmapDownload from './RoadmapDownload.jsx';
+import { minutesOf } from '../lib/videoTimes.js';
 import { useReducedMotion } from '../lib/useReducedMotion.js';
 
 // The cybersecurity roadmap drawn as a winding road. Built only from the course outline API (/api/courses/:slug/outline),
@@ -198,6 +199,7 @@ function Milestone({ item, course, signedIn }) {
         {m.timeEstimate && (
           <p className="small muted">
             <Clock size={14} aria-hidden="true" /> {m.timeEstimate}
+            {m.videoSeconds > 0 && <> · {t('video.total', { d: fmt.duration(minutesOf(m.videoSeconds)) })}</>}
           </p>
         )}
         {item.status === 'locked' && m.reasons.length > 0 && (

@@ -2,7 +2,9 @@
 // clips, every video has a question, keys are unique, every module has enough block-quiz questions, pass marks are
 // at least 80%, linked courses exist, and resources carry an access label. Usage: npm run check:catalog
 import courses from '../src/catalog/index.js';
+import RUNTIMES from '../src/catalog/video-runtimes.json' with { type: 'json' };
 
+const unverified = new Set();
 const CHOICE = new Set(['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT']);
 const ACCESS = new Set(['FREE', 'ACCOUNT', 'PAID']);
 const errors = [];
@@ -66,6 +68,12 @@ for (const course of courses) {
       }
       const length = v.start != null && v.end != null ? v.end - v.start : v.duration;
       if (!v.youtubeId || !length) fail(where, 'video needs an id and a duration or start/end');
+      // Runtimes verified from each video's page (npm run check:videos): a whole video must state its real runtime,
+      // and a clip must end within the video
+      const runtime = RUNTIMES[v.youtubeId]?.seconds;
+      if (runtime == null) unverified.add(v.youtubeId);
+      else if (v.start == null && v.end == null && Math.abs(v.duration - runtime) > 1) fail(where, `duration ${v.duration}s but the video runs ${runtime}s`);
+      else if (v.end != null && v.end > runtime + 1) fail(where, `clip ends at ${v.end}s but the video runs ${runtime}s`);
       if (!l.checkpoints?.length) fail(where, 'every video needs at least one in-video question');
       for (const [i, c] of (l.checkpoints || []).entries()) {
         const cw = `${where}/checkpoint ${i + 1}`;
@@ -98,6 +106,7 @@ for (const course of courses) {
 
 console.log(`${courses.length} courses, ${totals.lessons} lessons, ${totals.checkpoints} checkpoints, ${totals.bank} bank questions, ${totals.readings} readings`);
 console.log('Question types:', types);
+if (unverified.size) console.warn(`Runtime unavailable (not verified) for ${unverified.size} video(s): ${[...unverified].join(', ')}`);
 if (errors.length) {
   console.error(`\n${errors.length} problem(s):\n- ${errors.join('\n- ')}`);
   process.exit(1);

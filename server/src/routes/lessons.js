@@ -11,7 +11,7 @@ import {
   topicStatusMessage,
 } from '../services/learning.js';
 import { issueCertificates } from '../services/certificates.js';
-import { completionStatus, recordVideoProgress, tryCompleteLesson, videoDuration, watchedPercent } from '../services/coursePlayer.js';
+import { completionStatus, recordVideoProgress, tryCompleteLesson, videoDuration, videoTimes, watchedPercent } from '../services/coursePlayer.js';
 import { presignPlayback, storageConfigured } from '../lib/storage.js';
 import { forbidden } from '../lib/errors.js';
 
@@ -21,9 +21,12 @@ router.use(requireAuth);
 // Video details for the player. Uploaded files get a short-lived signed playback URL.
 async function lessonVideo(lesson) {
   if (!lesson.videoProvider) return null;
+  const times = videoTimes(lesson);
   const base = {
     provider: lesson.videoProvider,
-    duration: videoDuration(lesson),
+    duration: times.seconds,
+    runtimeSeconds: times.runtimeSeconds,
+    isClip: times.isClip,
     credit: lesson.videoCredit,
     sourceUrl: lesson.videoSourceUrl,
   };

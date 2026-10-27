@@ -20,7 +20,8 @@
     "create-admin": "node scripts/create-admin.js",
     "postinstall": "prisma generate",
     "check:catalog": "node scripts/check-catalog.js",
-    "catalog:sync": "node scripts/sync-catalog.js"
+    "catalog:sync": "node scripts/sync-catalog.js",
+    "check:videos": "node scripts/check-video-runtimes.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import courses, { CATALOG_RELEASE } from '../catalog/index.js';
+import RUNTIMES from '../catalog/video-runtimes.json' with { type: 'json' };
 
 const CHOICE_TYPES = new Set(['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT']);
 
@@ -55,7 +56,9 @@ async function syncLesson(moduleId, order, l, courseKey) {
             youtubeId: v.youtubeId,
             videoStart: v.start ?? null,
             videoEnd: v.end ?? null,
-            videoDurationSeconds: v.duration ?? null,
+            // The full video's runtime as verified from its page (src/catalog/video-runtimes.json), also for clips;
+            // null when it could not be verified. What a clip plays is videoEnd - videoStart.
+            videoDurationSeconds: RUNTIMES[v.youtubeId]?.seconds ?? null,
           }
         : {};
   const data = {
@@ -66,7 +69,10 @@ async function syncLesson(moduleId, order, l, courseKey) {
     content: l.content,
     keyTakeaways: l.takeaways ?? [],
     difficulty: l.difficulty ?? 'BEGINNER',
-    estimatedMinutes: l.minutes ?? (v ? Math.max(1, Math.round(((v.end ?? v.duration) - (v.start ?? 0)) / 60)) : null),
+    // Time to complete, not the video runtime: what the lesson plays (rounded up, so it is never shorter than the
+    // video) plus about a minute per in-video question
+    estimatedMinutes:
+      l.minutes ?? (v ? Math.ceil(((v.end ?? v.duration) - (v.start ?? 0)) / 60) + (l.checkpoints?.length ?? 0) : null),
     videoCredit: v?.credit ?? null,
     videoSourceUrl: v?.sourceUrl ?? null,
     ...video,

@@ -3,6 +3,26 @@
 import PDFDocument from 'pdfkit';
 import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
+import { videoTimes } from './coursePlayer.js';
+
+// 90 minutes reads "1 hr 30 min", like the website
+export function formatDuration(seconds) {
+  if (!seconds) return null;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} hr ${m} min` : `${h} hr`;
+}
+
+// "Video 12 min", "Clip 39 min of a 1 hr 55 min video", or the runtime unavailable notice
+export function videoLabel(l) {
+  if (!l.video) return null;
+  const plays = formatDuration(l.videoSeconds);
+  const full = formatDuration(l.runtimeSeconds);
+  if (l.isClip) return full ? `Clip ${plays} of a ${full} video` : `Clip ${plays} (full video runtime unavailable)`;
+  return full ? `Video ${full}` : 'Video runtime unavailable';
+}
 
 const isStage = (m) => m.learningOutcomes.length > 0 || Boolean(m.practice) || m.linkedRoadmapIds.length > 0 || (Array.isArray(m.specialties) && m.specialties.length > 0);
 
@@ -15,7 +35,7 @@ export async function roadmapHandout(slug) {
         include: {
           lessons: {
             orderBy: { order: 'asc' },
-            select: { id: true, title: true, estimatedMinutes: true, videoProvider: true, videoCredit: true, videoSourceUrl: true, _count: { select: { quizzes: true } } },
+            select: { id: true, title: true, estimatedMinutes: true, videoProvider: true, videoStart: true, videoEnd: true, videoDurationSeconds: true, videoCredit: true, videoSourceUrl: true, _count: { select: { quizzes: true } } },
           },
           readings: { orderBy: { order: 'asc' } },
           _count: { select: { blockQuestions: true } },
@@ -53,6 +73,10 @@ export async function roadmapHandout(slug) {
         title: l.title,
         minutes: l.estimatedMinutes,
         video: Boolean(l.videoProvider),
+        // What the lesson plays, and the full video's verified runtime (null when unavailable)
+        videoSeconds: videoTimes(l)?.seconds ?? null,
+        runtimeSeconds: videoTimes(l)?.runtimeSeconds ?? null,
+        isClip: Boolean(videoTimes(l)?.isClip),
         questions: l._count.quizzes,
         credit: l.videoCredit,
         sourceUrl: l.videoSourceUrl,
@@ -319,7 +343,13 @@ export function renderRoadmapPdf(h) {
       label('Lessons');
       s.lessons.forEach((l, i) => {
         ensure(40);
-        const meta = [l.minutes ? `${l.minutes} min` : null, l.video ? `${l.questions} question${l.questions === 1 ? '' : 's'} in the video` : 'reading'].filter(Boolean).join(' · ');
+        const meta = [
+          videoLabel(l) ?? 'Reading',
+          l.video ? `${l.questions} question${l.questions === 1 ? '' : 's'}` : null,
+          l.minutes ? `about ${formatDuration(l.minutes * 60)} to complete` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
         rich([{ text: `${i + 1}. `, bold: true }, { text: l.title, link: l.url }, { text: `  ${meta}`, color: C.muted }]);
         if (l.credit) {
           rich([{ text: `Video: ${l.credit}` }, ...(l.sourceUrl ? [{ text: '  (watch on YouTube)', link: l.sourceUrl }] : [])], {

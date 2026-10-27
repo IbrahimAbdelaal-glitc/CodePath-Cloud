@@ -32,7 +32,7 @@ const SAFETY = `> **Stay legal and safe.** Only test systems you own or have wri
 
 export default {
   key: 'cyber-roadmap',
-  version: 1,
+  version: 2,
   topics: {
     'road-start': 'Computer and internet basics',
     'road-core': 'Core security skills',
@@ -90,7 +90,7 @@ export default {
       passPercent: 80,
       quizCount: 10,
       allowTestOut: true,
-      time: 'About 3 to 4 hours: 2 hours of video plus the exercises',
+      time: 'About 3 to 4 hours, including the exercises',
       outcomes: [
         'Convert small numbers between binary and decimal, and explain bits, bytes and ASCII',
         'Describe what the CPU, RAM, hard drives, SSDs and the operating system do',
