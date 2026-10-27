@@ -34,6 +34,7 @@ import { Alert, ErrorState, PageSkeleton } from '../components/States.jsx';
 import Markdown from '../components/Markdown.jsx';
 import VideoPlayer from '../components/VideoPlayer.jsx';
 import CheckpointCard from '../components/CheckpointCard.jsx';
+import RoadmapMap, { isStage, useHashTarget } from '../components/RoadmapMap.jsx';
 import VideoUploadDialog from '../components/VideoUploadDialog.jsx';
 
 export const minutesFrom = (seconds) => (seconds ? Math.max(1, Math.round(seconds / 60)) : null);
@@ -258,12 +259,9 @@ function CourseHome({ course }) {
         ? `/learn/${course.nextStep.slug}`
         : `/learn/${course.slug}/${course.nextStep.lessonId}`
     : null;
-  const stages = course.modules.filter((m) => m.learningOutcomes.length || m.practice || m.linkedCourses.length || m.specialties.length);
+  const stages = course.modules.filter(isStage);
   const resumeTarget = course.resume && !course.resume.completed ? `/learn/${course.slug}/${course.resume.lessonId}` : null;
-
-  useEffect(() => {
-    if (window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
-  }, []);
+  useHashTarget();
 
   return (
     <div className="course-home">
@@ -318,9 +316,11 @@ function CourseHome({ course }) {
         </section>
       )}
 
+      {stages.length > 1 && <RoadmapMap course={course} signedIn />}
+
       {stages.length > 0 && (
         <section aria-labelledby="stages-h" className="stages">
-          <h2 id="stages-h">{t('player.stages')}</h2>
+          <h2 id="stages-h">{t(stages.length > 1 ? 'player.stageDetails' : 'player.stages')}</h2>
           {stages.map((m) => (
             <StageCard key={m.id} course={course} stage={m} open={stages.length === 1 || m === stages.find((x) => !x.locked && x.quiz?.state !== 'PASSED')} />
           ))}
@@ -369,11 +369,11 @@ function CourseHome({ course }) {
 }
 
 // One roadmap stage: time, prerequisites, outcomes, linked courses, skip test, exercises, specialties and next steps
-function StageCard({ course, stage: m, open }) {
+export function StageCard({ course, stage: m, open }) {
   const { t, fmt } = useI18n();
   const testOut = m.quiz?.testOut;
   return (
-    <details className={`panel stage ${m.locked ? 'is-locked' : ''}`} open={open}>
+    <details id={`stage-${m.id}`} className={`panel stage ${m.locked ? 'is-locked' : ''}`} open={open}>
       <summary className="stage__head">
         <span className="stage__title">
           {m.locked && <Lock size={16} aria-label={t('player.locked')} />} {m.title}
@@ -460,7 +460,7 @@ function StageCard({ course, stage: m, open }) {
         </div>
       )}
       {m.practice && (
-        <div className="stage__practice">
+        <div id={`practice-${m.id}`} className="stage__practice">
           <h3>{t('player.stagePractice')}</h3>
           <Markdown>{m.practice}</Markdown>
         </div>

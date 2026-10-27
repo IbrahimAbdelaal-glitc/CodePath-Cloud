@@ -286,7 +286,7 @@ The server refuses to open lessons in a locked module, mark them complete or acc
 
 ### Cybersecurity courses
 
-The courses live in `server/src/catalog/`. The API does not create or update them on start-up or deploy; after a catalog change, run `npm --prefix server run catalog:sync` (a dry run that prints learner data counts and the planned changes), then `npm --prefix server run catalog:sync -- --apply`, which syncs under the catalog lock and fails loudly if any learner data count went down. Bump a course's `version` to update its content in place: items are matched by key, so student progress on unchanged lessons is kept, and uploaded videos and instructor review decisions are preserved. Run `npm --prefix server run check:catalog` to validate the content.
+The courses live in `server/src/catalog/`. The API does not create or update them on start-up or deploy. After a catalog change, an admin opens **Admin > System > Course catalog**, checks the preview (planned changes, learner data counts and the retired paths) and applies it once; this runs on the API server, so it also works on hosts without a shell such as Render Free. From a machine with database access you can instead run `npm --prefix server run catalog:sync` (a dry run that prints learner data counts and the planned changes), then `npm --prefix server run catalog:sync -- --apply`, which syncs under the catalog lock and fails loudly if any learner data count went down. Bump a course's `version` to update its content in place: items are matched by key, so student progress on unchanged lessons is kept, and uploaded videos and instructor review decisions are preserved. Run `npm --prefix server run check:catalog` to validate the content.
 
 | # | Course | Level | Videos | Questions grounded in |
 | --- | --- | --- | --- | --- |
@@ -316,7 +316,7 @@ The four programming paths (`frontend`, `dotnet-backend`, `python-backend`, `ai-
 - Watching is verified on the server: the player reports the intervals it actually played, credit is limited by elapsed wall-clock time (up to 2× speed), so skipping ahead earns nothing.
 - In-video questions do not affect the 70% weak-topic rule.
 - Each module ends with a block quiz drawn at random from the module's bank (10 or more questions, pass mark 80%). Passing it unlocks the next module; every attempt is saved and can be reviewed. Completions and passes recorded under the earlier rules are kept.
-- The catalog is synced only by `npm run catalog:sync -- --apply`, never on start-up or deploy. The sync takes a lease row (`CatalogLock`) first, so two runs cannot sync at the same time.
+- The catalog is synced only on purpose (System page or `npm run catalog:sync -- --apply`), never on start-up or deploy. The sync takes a lease row (`CatalogLock`) first, so two runs cannot sync at the same time.
 
 ### Video uploads
 

@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { config } from '../config.js';
 import { mailMode, parseAddress, sendMail } from '../lib/mailer.js';
 import { storageConfigured } from '../lib/storage.js';
+import { applyCatalogSync, catalogPlan, learnerCounts } from '../services/courseCatalog.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('ADMIN'));
@@ -142,7 +143,8 @@ router.get('/system', async (req, res) => {
     prisma.blockQuestion.count({ where: { needsReview: true } }),
   ]);
   res.json({
-    mail: { mode: mailMode, from: parseAddress(config.mail.from).email },
+    // The Apps Script relay sends from the Google account that deployed it; MAIL_FROM is not used
+    mail: { mode: mailMode, from: mailMode === 'apps-script' ? null : parseAddress(config.mail.from).email },
     storage: { configured: storageConfigured, bucket: config.storage.bucket, maxVideoMb: config.storage.maxVideoMb },
     appUrl: config.appUrl,
     uploadedVideos: videos,
@@ -167,6 +169,29 @@ router.post('/system/test-email', testMailLimiter, async (req, res) => {
     console.error('Test email failed:', err.message);
     throw badRequest(`The email could not be sent: ${err.message}`, { code: 'MAIL_FAILED' });
   }
+});
+
+// Built-in course catalog. Nothing syncs on its own: an admin previews the change (a dry run that writes nothing),
+// then applies it. The sync is idempotent (courses already at the code's version are skipped), takes the catalog
+// lease so two runs cannot overlap, and reports learner data counts before and after.
+router.get('/catalog', async (req, res) => {
+  const [plan, learner] = await Promise.all([catalogPlan(), learnerCounts()]);
+  res.json({ ...plan, learner });
+});
+
+const catalogSyncLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
+
+router.post('/catalog/sync', catalogSyncLimiter, async (req, res) => {
+  z.object({ confirm: z.literal(true, { error: 'Confirm the catalog update' }) }).parse(req.body);
+  const plan = await catalogPlan();
+  if (!plan.pending) return res.json({ status: 'up-to-date', steps: plan.steps });
+  console.log(`[catalog] sync started by admin ${req.user.id}`);
+  const outcome = await applyCatalogSync();
+  if (outcome.status === 'busy') {
+    throw badRequest('Another catalog update is running. Try again in a few minutes.', { code: 'CATALOG_BUSY' });
+  }
+  if (outcome.lost.length) console.error(`[catalog] learner data decreased: ${outcome.lost.join(', ')}`);
+  res.json(outcome);
 });
 
 export default router;

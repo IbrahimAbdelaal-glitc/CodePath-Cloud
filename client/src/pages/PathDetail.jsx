@@ -6,12 +6,17 @@ import { useFetch } from '../lib/useFetch.js';
 import { DifficultyBadge, ProgressBar, ProgressRing } from '../components/Badges.jsx';
 import LockNotice from '../components/LockNotice.jsx';
 import { ErrorState, PageSkeleton } from '../components/States.jsx';
+import RoadmapMap, { isStage, useHashTarget } from '../components/RoadmapMap.jsx';
+import { StageCard } from './CoursePlayer.jsx';
 
 export default function PathDetail() {
   const { slug } = useParams();
   const { user, ready } = useAuth();
   const { t, fmt } = useI18n();
   const { data, error, loading, reload } = useFetch(ready ? `/api/roadmaps/${encodeURIComponent(slug)}` : null);
+  // A staged roadmap is drawn as a winding road from the course outline (the same data the course player uses)
+  const { data: outline } = useFetch(ready ? `/api/courses/${encodeURIComponent(slug)}/outline` : null);
+  useHashTarget();
 
   if (!ready || loading) return <PageSkeleton />;
   if (error)
@@ -22,6 +27,8 @@ export default function PathDetail() {
     );
 
   const r = data.roadmap;
+  const course = outline?.course;
+  const stagedCourse = course?.modules?.filter(isStage).length > 1 ? course : null;
   const next = r.modules.flatMap((m) => (m.access.locked && m.access.enforced ? [] : m.lessons)).find((l) => !l.isCompleted);
   // Video courses open in the course player, which tracks watching, checkpoints and block quizzes
   const lessonHref = (id) => (r.isSequential ? `/learn/${r.slug}/${id}` : `/lessons/${id}`);
@@ -129,6 +136,17 @@ export default function PathDetail() {
         </section>
       )}
 
+      {stagedCourse ? (
+        <div className="container section">
+          <RoadmapMap course={stagedCourse} signedIn={Boolean(user)} />
+          <section aria-labelledby="stages-h" className="stages">
+            <h2 id="stages-h">{t('player.stageDetails')}</h2>
+            {stagedCourse.modules.filter(isStage).map((m) => (
+              <StageCard key={m.id} course={stagedCourse} stage={m} open={false} />
+            ))}
+          </section>
+        </div>
+      ) : (
       <section className="container section" aria-labelledby="modules-title">
         <h2 id="modules-title">{t('path.modulesTitle')}</h2>
         <ol className="modules">
@@ -233,6 +251,7 @@ export default function PathDetail() {
           })}
         </ol>
       </section>
+      )}
     </div>
   );
 }

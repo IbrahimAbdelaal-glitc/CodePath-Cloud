@@ -1,4 +1,4 @@
-// Built-in course catalog (src/catalog). Each course has a key and a version. When `npm run catalog:sync -- --apply` runs (never on start-up), a course that is missing
+// Built-in course catalog (src/catalog). Each course has a key and a version. When an operator runs the sync (CLI or admin System page; never on start-up), a course that is missing
 // is created, and a course whose stored catalogVersion is lower than the code's version is updated in place:
 // items are matched by catalogKey, so student progress on unchanged lessons is kept. Content that instructors add
 // themselves (no catalogKey) is never touched. Uploaded videos and instructor review decisions are preserved.
@@ -228,7 +228,67 @@ export async function syncCourse(course) {
   return { key: course.key, action: existing ? 'updated' : 'created' };
 }
 
-// Runs only from scripts/sync-catalog.js. Two runs could overlap (two operators, or a retry), so the sync takes a lease row first
+// The programming paths retired from the student catalog by migration 20261028000000_cyber_roadmap (unpublished, never deleted)
+export const ARCHIVED_PATH_SLUGS = ['frontend', 'dotnet-backend', 'python-backend', 'ai-fullstack'];
+
+// Rows that belong to learners; a catalog sync must never reduce any of these
+export async function learnerCounts() {
+  const [users, progress, quizAttempts, blockAttempts, videoProgress, certificates, bookmarks, activity] = await Promise.all([
+    prisma.user.count(),
+    prisma.userProgress.count(),
+    prisma.quizAttempt.count(),
+    prisma.blockQuizAttempt.count(),
+    prisma.lessonVideoProgress.count(),
+    prisma.certificate.count(),
+    prisma.bookmark.count(),
+    prisma.lessonActivity.count(),
+  ]);
+  return { users, progress, quizAttempts, blockAttempts, videoProgress, certificates, bookmarks, activity };
+}
+
+// Dry run: what a sync would do to each catalog course, plus the state of the archived paths. Writes nothing.
+export async function catalogPlan() {
+  const stored = await prisma.roadmap.findMany({
+    where: { catalogKey: { in: courses.map((c) => c.key) } },
+    select: { catalogKey: true, catalogVersion: true },
+  });
+  const byKey = new Map(stored.map((r) => [r.catalogKey, r]));
+  const steps = courses.map((c) => {
+    const r = byKey.get(c.key);
+    const action = !r ? 'create' : (r.catalogVersion ?? 0) >= c.version ? 'up-to-date' : 'update';
+    return { key: c.key, slug: c.roadmap.slug, title: c.roadmap.title, stored: r ? (r.catalogVersion ?? 0) : null, code: c.version, action };
+  });
+  const archived = await prisma.roadmap.findMany({
+    where: { slug: { in: ARCHIVED_PATH_SLUGS } },
+    select: { slug: true, title: true, isPublished: true, catalogKey: true, _count: { select: { certificates: true } } },
+    orderBy: { slug: 'asc' },
+  });
+  return {
+    steps,
+    pending: steps.some((s) => s.action !== 'up-to-date'),
+    archivedPaths: archived.map((r) => ({
+      slug: r.slug,
+      title: r.title,
+      published: r.isPublished,
+      // A sync only touches courses with a catalog key; these have none, so it cannot change them
+      touchedBySync: r.catalogKey !== null,
+      certificates: r._count.certificates,
+    })),
+  };
+}
+
+// Runs the sync and proves no learner rows were lost. Returns { status: 'busy' | 'synced', results, before, after, lost }.
+export async function applyCatalogSync({ log = console.log } = {}) {
+  const before = await learnerCounts();
+  const results = await syncCatalog({ log });
+  if (!results.length) return { status: 'busy', before };
+  const after = await learnerCounts();
+  const lost = Object.keys(before).filter((k) => after[k] < before[k]);
+  return { status: 'synced', results, before, after, lost };
+}
+
+// Runs only on purpose: from scripts/sync-catalog.js or the admin System page, never on start-up or deploy.
+// Two runs could overlap (two operators, or a retry), so the sync takes a lease row first
 // (a session advisory lock is not used because pooled connections cannot guarantee lock and unlock share a session).
 // The lease expires on its own if a run dies mid-sync. Unique catalog keys still prevent duplicates.
 const LEASE_MINUTES = 10;

@@ -520,6 +520,10 @@ a.outline__item:hover {
 .kv dt {
   color: var(--muted);
 }
+/* Lets <div> rows group a dt and dd without breaking the grid */
+.kv__row {
+  display: contents;
+}
 .kv dd {
   margin: 0;
   word-break: break-word;
@@ -655,5 +659,349 @@ a.outline__item:hover {
   .stage__course {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* ── Roadmap: winding road ────────────────────────
+   Each .road__stop is a row: [card | road | card] on wide screens (the card alternates sides),
+   [road | card] on phones. The road column draws an S-curve that starts and ends at its centre,
+   so the rows join into one continuous road. */
+.road-map {
+  margin: 8px 0 28px;
+}
+.road-map__head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.road-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 18px;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.road-map__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.road-map__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--surface-3);
+}
+.road-map__legend .is-done .road-map__dot {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.road-map__legend .is-current .road-map__dot {
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(183 255 60 / 30%);
+}
+.road-map__legend .is-open .road-map__dot {
+  border-color: var(--brand);
+}
+.road-map__legend .is-locked .road-map__dot {
+  border-style: dashed;
+  border-color: var(--muted);
+  background: transparent;
+}
+
+.road {
+  --road-col: 132px;
+  --swing: 80%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.road__stop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--road-col) minmax(0, 1fr);
+  align-items: center;
+  min-height: 132px;
+}
+.road__stop.is-left {
+  --swing: 20%;
+}
+.road__track {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  align-self: stretch;
+  min-height: 132px;
+}
+.road__stop.is-right .road__card {
+  grid-column: 3;
+  grid-row: 1;
+}
+.road__stop.is-left .road__card {
+  grid-column: 1;
+  grid-row: 1;
+}
+.road__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.road__asphalt {
+  fill: none;
+  stroke: #0a1d12;
+  stroke-width: 22px;
+  stroke-linecap: butt;
+}
+.road__line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2px;
+  stroke-dasharray: 7 9;
+}
+.road__stop.is-done .road__line,
+.road__stop.is-skipped .road__line {
+  stroke: var(--brand);
+  stroke-width: 3px;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 4px rgb(25 229 122 / 70%));
+}
+.road__stop.is-current .road__line {
+  stroke: var(--accent);
+  stroke-width: 3px;
+}
+.road__node {
+  position: absolute;
+  left: var(--swing);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--brand);
+  background: var(--bg);
+  color: var(--brand-2);
+}
+.road__stop--stage .road__node {
+  width: 60px;
+  height: 60px;
+  border-width: 3px;
+  box-shadow: var(--glow);
+}
+.road__num {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.road__stop.is-done .road__node,
+.road__stop.is-skipped .road__node {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+.road__stop.is-current .road__node {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 5px rgb(183 255 60 / 22%), var(--glow);
+}
+.road__stop.is-locked .road__node {
+  border-style: dashed;
+  border-color: var(--muted);
+  color: var(--muted);
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .road__stop.is-current .road__node {
+    animation: road-pulse 2.4s var(--ease) infinite;
+  }
+}
+@keyframes road-pulse {
+  50% {
+    box-shadow: 0 0 0 11px rgb(183 255 60 / 0%), var(--glow);
+  }
+}
+
+.road__card {
+  margin: 10px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.road__stop.is-left .road__card {
+  text-align: right;
+}
+.road__stop.is-left .road__card .road__actions,
+.road__stop.is-left .road__card .road__eyebrow {
+  justify-content: flex-end;
+}
+.road__stop.is-left .road__card .progress {
+  margin-left: auto;
+}
+.road__stop--stage .road__card {
+  border-color: var(--line-strong);
+  background: linear-gradient(160deg, var(--surface-2), var(--surface));
+}
+.road__stop.is-current .road__card {
+  border-color: var(--accent);
+}
+.road__stop.is-locked .road__card {
+  border-style: dashed;
+  opacity: 0.82;
+}
+.road__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-2);
+}
+.road__title {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+}
+.road__title--sm {
+  font-size: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.road__stop.is-left .road__title--sm {
+  justify-content: flex-end;
+}
+.road__card p {
+  margin: 0 0 8px;
+}
+.road__card .progress {
+  max-width: 260px;
+  margin-bottom: 6px;
+}
+.road__chip.is-done,
+.road__chip.is-skipped {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.road__chip.is-current {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.road__chip.is-locked {
+  color: var(--muted);
+}
+.road__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.road__reasons {
+  list-style: none;
+  padding: 0;
+  color: var(--warning);
+}
+.road__fork {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  text-align: left;
+}
+.road__fork li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+.road__fork svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.road__fork strong {
+  display: block;
+}
+.road__finish {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--road-col) minmax(0, 1fr);
+  height: 56px;
+}
+.road__finish .road__node {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  grid-column: 2;
+  justify-self: center;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.stage {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+.stage__practice {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+
+/* Phones: the road runs down the left edge, every card on the right */
+@media (max-width: 760px) {
+  .road {
+    --road-col: 64px;
+  }
+  .road__stop,
+  .road__finish {
+    grid-template-columns: var(--road-col) minmax(0, 1fr);
+  }
+  .road__stop.is-right {
+    --swing: 66%;
+  }
+  .road__stop.is-left {
+    --swing: 34%;
+  }
+  .road__track {
+    grid-column: 1;
+  }
+  .road__stop.is-right .road__card,
+  .road__stop.is-left .road__card {
+    grid-column: 2;
+    text-align: left;
+  }
+  .road__stop.is-left .road__card .road__actions,
+  .road__stop.is-left .road__card .road__eyebrow,
+  .road__stop.is-left .road__title--sm {
+    justify-content: flex-start;
+  }
+  .road__stop.is-left .road__card .progress {
+    margin-left: 0;
+  }
+  .road__asphalt {
+    stroke-width: 14px;
+  }
+  .road__node {
+    width: 34px;
+    height: 34px;
+  }
+  .road__stop--stage .road__node {
+    width: 48px;
+    height: 48px;
+  }
+  .road__finish .road__node {
+    grid-column: 1;
   }
 }
