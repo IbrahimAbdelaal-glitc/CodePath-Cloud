@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useMotionPreference } from '../lib/useMotionPreference.js';
-import { useResolvedTheme } from '../lib/useResolvedTheme.js';
+import { useLocation } from 'react-router-dom';
+import { useReducedMotion } from '../lib/useReducedMotion.js';
 
 // Animated "digital rain" drawn on two canvases behind the whole interface:
 // a far layer (smaller, dim, blurred by CSS) and a near layer (larger, brighter glyphs with glowing heads),
 // which gives the depth-of-field look of the reference photo. Purely decorative: aria-hidden and pointer-events: none.
-// Animation stops when the visitor prefers reduced motion, turns motion off, or the tab is hidden; a still frame remains.
+// It is not shown while studying (course pages, lessons and quizzes), so nothing moves behind a video or question.
+// Animation stops when the device asks for reduced motion or the tab is hidden; a still frame remains.
 const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEFZ:=*+<>¦｜ÉÂÔÑØ#$%&';
 const FPS = 24;
 
@@ -78,15 +79,18 @@ function makeLayer(canvas, { size, speed, fade, headAlpha, bodyAlpha, density })
   return { resize, step, still };
 }
 
-// The rain belongs to the dark "matrix" theme; the light theme stays calm and plain
+// Course pages (/learn/...), lessons (/lessons/...) and block quizzes (/learn/.../quiz/...)
+const STUDY_PATHS = /^\/(learn|lessons)\//;
+
 export default function MatrixRain() {
-  return useResolvedTheme() === 'dark' ? <Rain /> : null;
+  const { pathname } = useLocation();
+  return STUDY_PATHS.test(pathname) ? null : <Rain />;
 }
 
 function Rain() {
   const farRef = useRef(null);
   const nearRef = useRef(null);
-  const { animate } = useMotionPreference();
+  const animate = !useReducedMotion();
 
   useEffect(() => {
     const far = makeLayer(farRef.current, { size: 13, speed: 3.2, fade: 0.055, headAlpha: 0.6, bodyAlpha: 0.4, density: 0.95 });

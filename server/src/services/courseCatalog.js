@@ -1,7 +1,9 @@
-// Built-in course catalog (src/catalog). Each course has a key and a version. On start-up, a course that is missing
+// Built-in course catalog (src/catalog). Each course has a key and a version. When `npm run catalog:sync -- --apply` runs (never on start-up), a course that is missing
 // is created, and a course whose stored catalogVersion is lower than the code's version is updated in place:
 // items are matched by catalogKey, so student progress on unchanged lessons is kept. Content that instructors add
 // themselves (no catalogKey) is never touched. Uploaded videos and instructor review decisions are preserved.
+// Catalog courses use an 80% pass mark for in-video questions and block quizzes unless a course says otherwise.
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import courses from '../catalog/index.js';
 
@@ -87,9 +89,32 @@ async function syncLesson(moduleId, order, l, courseKey) {
   return lesson;
 }
 
+// Other catalog courses referenced by key, resolved to the stored roadmaps (they are synced earlier in the list)
+async function catalogRoadmaps(keys) {
+  if (!keys?.length) return [];
+  const found = await prisma.roadmap.findMany({ where: { catalogKey: { in: keys } }, select: { id: true, slug: true, title: true, catalogKey: true } });
+  const byKey = new Map(found.map((r) => [r.catalogKey, r]));
+  const missing = keys.filter((k) => !byKey.has(k));
+  if (missing.length) throw new Error(`Catalog course(s) not found: ${missing.join(', ')}. List them before the course that links them.`);
+  return keys.map((k) => byKey.get(k));
+}
+
 async function syncModule(roadmapId, order, m, courseKey) {
   const key = `${courseKey}:${m.key}`;
   const existing = await prisma.module.findUnique({ where: { catalogKey: key } });
+  const linked = await catalogRoadmaps(m.linkedCourses);
+  const specialties = [];
+  for (const sp of m.specialties || []) {
+    const courses = await catalogRoadmaps(sp.courses);
+    specialties.push({
+      key: sp.key,
+      title: sp.title,
+      summary: sp.summary,
+      roles: sp.roles ?? [],
+      courses: courses.map(({ slug, title }) => ({ slug, title })),
+      resources: sp.resources ?? [],
+    });
+  }
   const data = {
     roadmapId,
     order,
@@ -97,7 +122,15 @@ async function syncModule(roadmapId, order, m, courseKey) {
     description: m.description ?? null,
     difficulty: m.difficulty ?? 'BEGINNER',
     quizQuestionCount: m.quizCount ?? 10,
-    quizPassPercent: m.passPercent ?? 70,
+    quizPassPercent: m.passPercent ?? 80,
+    allowTestOut: Boolean(m.allowTestOut),
+    linkedRoadmapIds: linked.map((r) => r.id),
+    learningOutcomes: m.outcomes ?? [],
+    prerequisiteNotes: m.prerequisites ?? [],
+    timeEstimate: m.time ?? null,
+    practice: m.practice ?? null,
+    nextSteps: m.nextSteps ?? null,
+    specialties,
   };
   const mod = existing
     ? await prisma.module.update({ where: { id: existing.id }, data })
@@ -141,6 +174,7 @@ async function syncModule(roadmapId, order, m, courseKey) {
       url: r.url,
       kind: r.kind ?? 'ARTICLE',
       note: r.note ?? null,
+      access: r.access ?? null,
       order: i + 1,
     };
     await prisma.moduleReading.upsert({ where: { catalogKey: rkey }, create: { ...fields, catalogKey: rkey }, update: fields });
@@ -168,6 +202,7 @@ export async function syncCourse(course) {
     learningOutcomes: r.learningOutcomes ?? [],
     sources: r.sources ?? [],
     isSequential: true,
+    checkpointPassPercent: r.checkpointPassPercent ?? 80,
     order: r.order ?? 0,
   };
   const roadmap = existing
@@ -193,14 +228,41 @@ export async function syncCourse(course) {
   return { key: course.key, action: existing ? 'updated' : 'created' };
 }
 
-// Runs once per start-up. Unique catalog keys stop a concurrent run from creating duplicates.
-// (A session advisory lock is not used because pooled connections cannot guarantee lock and unlock share a session.)
+// Runs only from scripts/sync-catalog.js. Two runs could overlap (two operators, or a retry), so the sync takes a lease row first
+// (a session advisory lock is not used because pooled connections cannot guarantee lock and unlock share a session).
+// The lease expires on its own if a run dies mid-sync. Unique catalog keys still prevent duplicates.
+const LEASE_MINUTES = 10;
+
+async function acquireLease(owner) {
+  const rows = await prisma.$queryRaw`
+    INSERT INTO "CatalogLock" ("name", "owner", "lockedUntil")
+    VALUES ('catalog', ${owner}, (now() AT TIME ZONE 'UTC') + make_interval(mins => ${LEASE_MINUTES}::int))
+    ON CONFLICT ("name") DO UPDATE SET "owner" = EXCLUDED."owner", "lockedUntil" = EXCLUDED."lockedUntil"
+    WHERE "CatalogLock"."lockedUntil" < (now() AT TIME ZONE 'UTC')
+    RETURNING "owner"`;
+  return rows.length === 1;
+}
+
+async function releaseLease(owner) {
+  await prisma.$executeRaw`
+    UPDATE "CatalogLock" SET "lockedUntil" = (now() AT TIME ZONE 'UTC') WHERE "name" = 'catalog' AND "owner" = ${owner}`;
+}
+
 export async function syncCatalog({ log = console.log } = {}) {
-  const results = [];
-  for (const course of courses) {
-    const result = await syncCourse(course);
-    if (result.action !== 'up-to-date') log(`[catalog] ${result.key}: ${result.action}`);
-    results.push(result);
+  const owner = randomUUID();
+  if (!(await acquireLease(owner))) {
+    log('[catalog] another instance is syncing the catalog; skipped');
+    return [];
   }
-  return results;
+  try {
+    const results = [];
+    for (const course of courses) {
+      const result = await syncCourse(course);
+      if (result.action !== 'up-to-date') log(`[catalog] ${result.key}: ${result.action}`);
+      results.push(result);
+    }
+    return results;
+  } finally {
+    await releaseLease(owner);
+  }
 }

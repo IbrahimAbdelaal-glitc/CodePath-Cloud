@@ -39,78 +39,75 @@
 }
 
 /* ── Dark theme treatment ─────────────────────── */
-:root[data-theme='dark'] body {
+body {
   background: #000;
 }
-:root[data-theme='dark'] h1,
-:root[data-theme='dark'] h2,
-:root[data-theme='dark'] h3,
-:root[data-theme='dark'] .brand-name {
+h1,
+h2,
+h3,
+.brand-name {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
-:root[data-theme='dark'] h1 {
+h1 {
   text-shadow: var(--glow);
 }
-:root[data-theme='dark'] .site-header {
+.site-header {
   background: rgb(0 8 3 / 78%);
   border-bottom-color: var(--line-strong);
   backdrop-filter: blur(8px) saturate(1.2);
 }
-:root[data-theme='dark'] .site-footer {
+.site-footer {
   background: rgb(0 8 3 / 88%);
 }
-:root[data-theme='dark'] .hero {
+.hero {
   background: linear-gradient(90deg, rgb(0 0 0 / 60%) 0%, rgb(0 0 0 / 22%) 55%, rgb(0 0 0 / 5%) 100%);
   border-bottom: 1px solid var(--line);
 }
-:root[data-theme='dark'] .hero h1,
-:root[data-theme='dark'] .hero__lead {
+.hero h1,
+.hero__lead {
   text-shadow: 0 0 12px #000, 0 0 24px #000, var(--glow);
 }
-:root[data-theme='dark'] .hero__bg {
+.hero__bg {
   display: none;
 }
-:root[data-theme='dark'] .hero h1 mark {
+.hero h1 mark {
   background: none;
   color: var(--brand-2);
   text-shadow: var(--glow);
 }
-:root[data-theme='dark'] .path-hero {
+.path-hero {
   background: linear-gradient(180deg, rgb(0 10 4 / 88%), rgb(0 0 0 / 55%));
 }
-:root[data-theme='dark'] .section--tinted {
+.section--tinted {
   background: rgb(0 14 6 / 80%);
 }
-:root[data-theme='dark'] .panel,
-:root[data-theme='dark'] .path-card,
-:root[data-theme='dark'] .auth-card,
-:root[data-theme='dark'] .quiz,
-:root[data-theme='dark'] .module__body {
+.panel,
+.path-card,
+.auth-card,
+.quiz,
+.module__body {
   backdrop-filter: blur(3px);
   border-color: var(--line-strong);
 }
-:root[data-theme='dark'] .btn--primary {
+.btn--primary {
   box-shadow: 0 0 0 1px var(--brand), 0 0 16px -4px var(--brand);
 }
-:root[data-theme='dark'] .btn--primary:hover {
+.btn--primary:hover {
   box-shadow: 0 0 0 1px var(--brand-2), 0 0 22px -2px var(--brand-2);
 }
-:root[data-theme='dark'] :focus-visible {
+:focus-visible {
   outline-color: var(--focus);
   box-shadow: 0 0 0 4px rgb(122 247 255 / 25%);
 }
-:root[data-theme='dark'] ::selection {
+::selection {
   background: var(--brand);
   color: var(--brand-ink);
 }
-:root[data-theme='dark'] .auth-page {
+.auth-page {
   background: none;
 }
 
-.motion-toggle {
-  flex-shrink: 0;
-}
 .main-nav .nav-link {
   white-space: nowrap;
 }

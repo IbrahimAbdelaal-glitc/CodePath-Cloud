@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, Award, CheckCircle2, ClipboardCheck, History, Lock, RotateCcw, Send, XCircle } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowRight, Award, CheckCircle2, ClipboardCheck, History, Lock, RotateCcw, Send, SkipForward, XCircle } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
@@ -71,7 +71,7 @@ function QuizSitting({ sitting, onSubmitted, onCancel }) {
   );
 }
 
-function QuizResults({ result, onRetake, nextTo, module }) {
+function QuizResults({ result, onRetake, nextTo, module, skip }) {
   const { t, fmt } = useI18n();
   const { attempt, passPercent, results } = result;
   return (
@@ -94,11 +94,13 @@ function QuizResults({ result, onRetake, nextTo, module }) {
                 <Award size={16} aria-hidden="true" /> {t('certificate.view')}
               </Link>
             )}
-            <button className="btn btn--secondary" onClick={onRetake}>
-              <RotateCcw size={16} aria-hidden="true" /> {attempt.passed ? t('blockQuiz.practiceAgain') : t('blockQuiz.retake')}
-            </button>
+            {onRetake && (
+              <button className="btn btn--secondary" onClick={onRetake}>
+                <RotateCcw size={16} aria-hidden="true" /> {attempt.passed ? t('blockQuiz.practiceAgain') : t('blockQuiz.retake')}
+              </button>
+            )}
           </div>
-          {!attempt.passed && <p className="small muted">{t('blockQuiz.failedHint')}</p>}
+          {!attempt.passed && <p className="small muted">{skip ? t('blockQuiz.skipFailedHint') : t('blockQuiz.failedHint')}</p>}
         </div>
       </section>
 
@@ -138,8 +140,11 @@ function QuizResults({ result, onRetake, nextTo, module }) {
   );
 }
 
+// mode=skip in the URL opens the skip test (taken before the lessons) instead of the exam
 function QuizView({ course, moduleId, onCourseChanged }) {
   const { t, fmt } = useI18n();
+  const [params] = useSearchParams();
+  const skip = params.get('mode') === 'skip';
   const toast = useToast();
   const navigate = useNavigate();
   const overview = useFetch(`/api/courses/modules/${moduleId}/quiz`);
@@ -158,7 +163,7 @@ function QuizView({ course, moduleId, onCourseChanged }) {
     setError(null);
     try {
       setResult(null);
-      setSitting(await api(`/api/courses/modules/${moduleId}/quiz/attempts`, { method: 'POST' }));
+      setSitting(await api(`/api/courses/modules/${moduleId}/quiz/attempts`, { method: 'POST', body: { mode: skip ? 'TEST_OUT' : 'EXAM' } }));
       window.scrollTo({ top: 0 });
     } catch (err) {
       setError(err.message);
@@ -179,6 +184,8 @@ function QuizView({ course, moduleId, onCourseChanged }) {
   if (overview.loading && !overview.data) return <PageSkeleton />;
   if (overview.error) return <ErrorState error={overview.error} onRetry={overview.reload} />;
   const o = overview.data;
+  // In skip mode the gate, the lead text and the retake rule come from the skip test
+  const gate = skip ? o.testOut || { locked: true, reasons: [], attemptsLeft: 0, attemptsAllowed: 0 } : o;
 
   return (
     <article className="quiz-page" aria-labelledby="quiz-title">
@@ -186,10 +193,11 @@ function QuizView({ course, moduleId, onCourseChanged }) {
         <div>
           <p className="eyebrow">{o.module.title}</p>
           <h1 id="quiz-title">
-            <ClipboardCheck size={24} aria-hidden="true" /> {t('blockQuiz.title')}
+            {skip ? <SkipForward size={24} aria-hidden="true" /> : <ClipboardCheck size={24} aria-hidden="true" />}{' '}
+            {skip ? t('blockQuiz.skipTitle') : t('blockQuiz.title')}
           </h1>
           <p className="muted">
-            {t('blockQuiz.lead', { n: fmt.number(o.module.questionCount), bank: fmt.number(o.module.bankSize), pass: o.module.passPercent })}
+            {t(skip ? 'blockQuiz.skipLead' : 'blockQuiz.lead', { n: fmt.number(o.module.questionCount), bank: fmt.number(o.module.bankSize), pass: o.module.passPercent })}
           </p>
         </div>
       </header>
@@ -202,7 +210,7 @@ function QuizView({ course, moduleId, onCourseChanged }) {
             setSitting(null);
             setResult(r);
             window.scrollTo({ top: 0 });
-            if (r.attempt.passed) toast.success(t('blockQuiz.passedToast'));
+            if (r.attempt.passed) toast.success(skip ? t('blockQuiz.skipPassedToast') : t('blockQuiz.passedToast'));
             if (r.certificate) toast.success(t('certificate.earned'));
             overview.reload();
             onCourseChanged();
@@ -212,18 +220,19 @@ function QuizView({ course, moduleId, onCourseChanged }) {
         <QuizResults
           result={result}
           module={module}
-          onRetake={start}
+          skip={skip}
+          onRetake={skip && (result.attempt.passed || !(o.testOut?.attemptsLeft > 0)) ? null : start}
           nextTo={next ? stepPath(course.slug, next) : `/learn/${course.slug}`}
         />
       ) : (
         <section className="panel quiz-intro">
-          {o.locked ? (
+          {gate.locked ? (
             <>
               <p className="warn-text">
-                <Lock size={16} aria-hidden="true" /> {t('blockQuiz.locked')}
+                <Lock size={16} aria-hidden="true" /> {skip ? t('blockQuiz.skipLocked') : t('blockQuiz.locked')}
               </p>
               <ul>
-                {o.reasons.map((r) => (
+                {gate.reasons.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
@@ -238,12 +247,17 @@ function QuizView({ course, moduleId, onCourseChanged }) {
               <ul className="quiz-intro__rules">
                 <li>{t('blockQuiz.rule1', { n: fmt.number(o.module.questionCount) })}</li>
                 <li>{t('blockQuiz.rule2', { pass: o.module.passPercent })}</li>
-                <li>{t('blockQuiz.rule3')}</li>
+                <li>
+                  {skip
+                    ? t('blockQuiz.skipRule', { left: fmt.number(gate.attemptsLeft), total: fmt.number(gate.attemptsAllowed) })
+                    : t('blockQuiz.rule3')}
+                </li>
               </ul>
               {error && <Alert>{error}</Alert>}
               <div className="form-actions">
                 <button className="btn btn--primary" onClick={start} disabled={starting}>
-                  <ClipboardCheck size={16} aria-hidden="true" /> {o.attempts.length ? t('blockQuiz.startAgain') : t('blockQuiz.start')}
+                  {skip ? <SkipForward size={16} aria-hidden="true" /> : <ClipboardCheck size={16} aria-hidden="true" />}{' '}
+                  {skip ? t('blockQuiz.skipStart') : o.attempts.length ? t('blockQuiz.startAgain') : t('blockQuiz.start')}
                 </button>
                 {o.passed && next && (
                   <button className="btn btn--secondary" onClick={() => navigate(stepPath(course.slug, next))}>
@@ -266,6 +280,7 @@ function QuizView({ course, moduleId, onCourseChanged }) {
               <thead>
                 <tr>
                   <th scope="col">{t('blockQuiz.date')}</th>
+                  <th scope="col">{t('blockQuiz.mode')}</th>
                   <th scope="col">{t('blockQuiz.score')}</th>
                   <th scope="col">{t('blockQuiz.result')}</th>
                   <th scope="col">
@@ -277,6 +292,7 @@ function QuizView({ course, moduleId, onCourseChanged }) {
                 {o.attempts.map((a) => (
                   <tr key={a.id}>
                     <td>{fmt.date(a.submittedAt)}</td>
+                    <td>{a.mode === 'TEST_OUT' ? t('blockQuiz.modeSkip') : t('blockQuiz.modeExam')}</td>
                     <td>
                       {fmt.number(a.correct)}/{fmt.number(a.total)} ({a.percent}%)
                     </td>

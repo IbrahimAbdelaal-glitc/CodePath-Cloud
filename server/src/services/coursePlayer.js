@@ -78,7 +78,8 @@ export async function recordVideoProgress(userId, lesson, { from, to, position }
 
 // ── Lesson completion ────────────────────────────────────────────────
 // In a sequential course a lesson can be marked complete only after its video is watched
-// and every in-video checkpoint question has been answered (right or wrong).
+// and every in-video checkpoint question has been answered. When the course sets checkpointPassPercent,
+// the student's latest answers must also score at least that much (wrong answers can be retried).
 export async function completionStatus(userId, lessonId) {
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
@@ -88,7 +89,7 @@ export async function completionStatus(userId, lessonId) {
       videoStart: true,
       videoEnd: true,
       videoDurationSeconds: true,
-      module: { select: { roadmap: { select: { id: true, isSequential: true } } } },
+      module: { select: { roadmap: { select: { id: true, isSequential: true, checkpointPassPercent: true } } } },
       quizzes: { where: { placement: 'CHECKPOINT' }, select: { id: true } },
       videoProgress: { where: { userId } },
     },
@@ -97,13 +98,18 @@ export async function completionStatus(userId, lessonId) {
   const duration = videoDuration(lesson);
   const progress = lesson.videoProgress[0] || null;
   const checkpointIds = lesson.quizzes.map((q) => q.id);
+  // Latest answer to each question
   const answered = checkpointIds.length
     ? await prisma.quizAttempt.findMany({
         where: { userId, quizId: { in: checkpointIds } },
+        orderBy: { createdAt: 'desc' },
         distinct: ['quizId'],
-        select: { quizId: true },
+        select: { quizId: true, isCorrect: true },
       })
     : [];
+  const correctIds = answered.filter((a) => a.isCorrect).map((a) => a.quizId);
+  const checkpointPercent = checkpointIds.length ? Math.round((correctIds.length / checkpointIds.length) * 100) : 100;
+  const passMark = lesson.module.roadmap.checkpointPassPercent;
   const enforced = lesson.module.roadmap.isSequential;
   const videoComplete = !hasVideo(lesson) || Boolean(progress?.completedAt);
   const blockers = [];
@@ -112,6 +118,8 @@ export async function completionStatus(userId, lessonId) {
   }
   if (enforced && answered.length < checkpointIds.length) {
     blockers.push(`Answer the in-video questions (${answered.length} of ${checkpointIds.length} answered)`);
+  } else if (enforced && passMark != null && checkpointPercent < passMark) {
+    blockers.push(`Score at least ${passMark}% on this video's questions (${checkpointPercent}% now). Rewatch the section and try again`);
   }
   return {
     roadmapId: lesson.module.roadmap.id,
@@ -120,6 +128,10 @@ export async function completionStatus(userId, lessonId) {
     videoComplete,
     checkpointsTotal: checkpointIds.length,
     checkpointsAnswered: answered.length,
+    checkpointsCorrect: correctIds.length,
+    checkpointPercent,
+    checkpointPassPercent: passMark ?? null,
+    correctQuizIds: correctIds,
     canComplete: blockers.length === 0,
     blockers,
   };
@@ -172,6 +184,8 @@ async function loadModuleForQuiz(user, moduleId) {
       order: true,
       quizQuestionCount: true,
       quizPassPercent: true,
+      allowTestOut: true,
+      linkedRoadmapIds: true,
       roadmapId: true,
       roadmap: { select: { slug: true, title: true, isPublished: true } },
       lessons: { select: { id: true } },
@@ -182,20 +196,103 @@ async function loadModuleForQuiz(user, moduleId) {
   return mod;
 }
 
-// Students must have unlocked the module and completed all its lessons before taking its quiz
-export async function blockQuizAccess(user, mod) {
-  const access = (await computeModuleAccess(user.id, [mod.id])).get(mod.id);
-  const done = await prisma.userProgress.count({
-    where: { userId: user.id, isCompleted: true, lessonId: { in: mod.lessons.map((l) => l.id) } },
+// Progress through the whole courses a module links to (a roadmap stage that reuses existing courses).
+// A course counts as complete with the same rule as its certificate: every lesson done and every block quiz passed.
+export async function linkedCourseStatus(userId, roadmapIds) {
+  if (!roadmapIds?.length) return [];
+  const roadmaps = await prisma.roadmap.findMany({
+    where: { id: { in: roadmapIds } },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      summary: true,
+      isPublished: true,
+      modules: { select: { id: true, _count: { select: { blockQuestions: true } }, lessons: { select: { id: true } } } },
+    },
   });
+  const lessonIds = roadmaps.flatMap((r) => r.modules.flatMap((m) => m.lessons.map((l) => l.id)));
+  const quizModuleIds = roadmaps.flatMap((r) => r.modules.filter((m) => m._count.blockQuestions > 0).map((m) => m.id));
+  const [done, passed] = userId
+    ? await Promise.all([
+        prisma.userProgress.findMany({ where: { userId, isCompleted: true, lessonId: { in: lessonIds } }, select: { lessonId: true } }),
+        prisma.blockQuizAttempt.findMany({
+          where: { userId, passed: true, moduleId: { in: quizModuleIds } },
+          distinct: ['moduleId'],
+          select: { moduleId: true },
+        }),
+      ])
+    : [[], []];
+  const doneSet = new Set(done.map((d) => d.lessonId));
+  const passedSet = new Set(passed.map((p) => p.moduleId));
+  const byId = new Map(roadmaps.map((r) => [r.id, r]));
+  // Keep the order the module lists them in
+  return roadmapIds.filter((id) => byId.has(id)).map((id) => {
+    const r = byId.get(id);
+    const lessons = r.modules.flatMap((m) => m.lessons);
+    const quizzes = r.modules.filter((m) => m._count.blockQuestions > 0);
+    const steps = lessons.length + quizzes.length;
+    const completedSteps = lessons.filter((l) => doneSet.has(l.id)).length + quizzes.filter((m) => passedSet.has(m.id)).length;
+    return {
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      summary: r.summary,
+      isPublished: r.isPublished,
+      completedSteps,
+      steps,
+      percent: steps ? Math.round((completedSteps / steps) * 100) : 0,
+      completed: steps > 0 && completedSteps === steps,
+    };
+  });
+}
+
+// A skip test is a block exam taken before the lessons. Each student gets this many tries per module;
+// after that they work through the lessons and take the normal exam, which can be retaken without limit.
+export const MAX_TEST_OUT_ATTEMPTS = 2;
+
+// EXAM: students must have unlocked the module, completed all its lessons (each lesson already requires the
+// video and its questions) and completed any linked courses. TEST_OUT: the module must offer a skip test, be
+// unlocked, not be passed yet, and the student must have tries left.
+export async function blockQuizAccess(user, mod, mode = 'EXAM') {
+  const access = (await computeModuleAccess(user.id, [mod.id])).get(mod.id);
   const reasons = [...access.reasons];
-  if (done < mod.lessons.length) reasons.push(`Complete every lesson in this module first (${done} of ${mod.lessons.length} done)`);
+  const [done, testOutsUsed, passedBefore] = await Promise.all([
+    prisma.userProgress.count({
+      where: { userId: user.id, isCompleted: true, lessonId: { in: mod.lessons.map((l) => l.id) } },
+    }),
+    prisma.blockQuizAttempt.count({ where: { userId: user.id, moduleId: mod.id, mode: 'TEST_OUT' } }),
+    prisma.blockQuizAttempt.count({ where: { userId: user.id, moduleId: mod.id, passed: true } }),
+  ]);
+  const linkedCourses = await linkedCourseStatus(user.id, mod.linkedRoadmapIds);
+
+  if (mode === 'TEST_OUT') {
+    if (!mod.allowTestOut) reasons.push('This block does not offer a skip test');
+    else if (passedBefore) reasons.push('You have already passed this block');
+    else if (testOutsUsed >= MAX_TEST_OUT_ATTEMPTS) {
+      reasons.push(`You have used your ${MAX_TEST_OUT_ATTEMPTS} skip-test attempts. Work through the lessons, then take the block exam`);
+    }
+  } else {
+    if (done < mod.lessons.length) reasons.push(`Complete every lesson in this module first (${done} of ${mod.lessons.length} done)`);
+    for (const c of linkedCourses) {
+      if (!c.completed) reasons.push(`Complete the course "${c.title}" (${c.completedSteps} of ${c.steps} steps done)`);
+    }
+  }
   const locked = user.role === 'STUDENT' && reasons.length > 0;
-  return { locked, reasons, lessonsDone: done, lessonsTotal: mod.lessons.length };
+  return {
+    locked,
+    reasons,
+    lessonsDone: done,
+    lessonsTotal: mod.lessons.length,
+    linkedCourses,
+    testOutsUsed,
+    testOutsLeft: Math.max(0, MAX_TEST_OUT_ATTEMPTS - testOutsUsed),
+  };
 }
 
 const attemptSummary = (a) => ({
   id: a.id,
+  mode: a.mode,
   correct: a.correct,
   total: a.total,
   percent: a.percent,
@@ -207,8 +304,9 @@ const attemptSummary = (a) => ({
 export async function blockQuizOverview(user, moduleId) {
   const mod = await loadModuleForQuiz(user, moduleId);
   if (!mod._count.blockQuestions) throw notFound('This module has no block quiz');
-  const [gate, attempts] = await Promise.all([
+  const [gate, testOutGate, attempts] = await Promise.all([
     blockQuizAccess(user, mod),
+    mod.allowTestOut ? blockQuizAccess(user, mod, 'TEST_OUT') : null,
     prisma.blockQuizAttempt.findMany({
       where: { userId: user.id, moduleId, submittedAt: { not: null } },
       orderBy: { submittedAt: 'desc' },
@@ -229,26 +327,53 @@ export async function blockQuizOverview(user, moduleId) {
     },
     locked: gate.locked,
     reasons: gate.reasons,
+    linkedCourses: gate.linkedCourses,
+    testOut: testOutGate
+      ? {
+          locked: testOutGate.locked,
+          reasons: testOutGate.reasons,
+          attemptsAllowed: MAX_TEST_OUT_ATTEMPTS,
+          attemptsUsed: testOutGate.testOutsUsed,
+          attemptsLeft: testOutGate.testOutsLeft,
+        }
+      : null,
     passed: attempts.some((a) => a.passed),
+    testedOut: attempts.some((a) => a.passed && a.mode === 'TEST_OUT'),
     bestPercent: best?.percent ?? null,
     attempts: attempts.map(attemptSummary),
   };
 }
 
-export async function startBlockQuiz(user, moduleId) {
+export async function startBlockQuiz(user, moduleId, mode = 'EXAM') {
   const mod = await loadModuleForQuiz(user, moduleId);
-  const gate = await blockQuizAccess(user, mod);
+  const gate = await blockQuizAccess(user, mod, mode);
   if (gate.locked) {
-    throw forbidden('This quiz is locked. Finish the module first.', { code: 'QUIZ_LOCKED', details: { reasons: gate.reasons } });
+    const message = mode === 'TEST_OUT' ? 'The skip test is not available.' : 'This quiz is locked. Finish the module first.';
+    throw forbidden(message, { code: 'QUIZ_LOCKED', details: { reasons: gate.reasons } });
   }
   const bank = await prisma.blockQuestion.findMany({ where: { moduleId } });
   if (!bank.length) throw notFound('This module has no block quiz');
   const picked = shuffle(bank).slice(0, Math.min(mod.quizQuestionCount, bank.length));
-  // An unfinished earlier sitting is discarded so only one attempt is open at a time
-  await prisma.blockQuizAttempt.deleteMany({ where: { userId: user.id, moduleId, submittedAt: null } });
+  // Only one attempt is open at a time. An unfinished exam is discarded; an unfinished skip test is closed as a
+  // failed try (score 0), so abandoning a skip test to see new questions still uses up an attempt.
+  await prisma.$transaction([
+    prisma.blockQuizAttempt.updateMany({
+      where: { userId: user.id, moduleId, submittedAt: null, mode: 'TEST_OUT' },
+      data: { submittedAt: new Date(), answers: {}, correct: 0, percent: 0, passed: false },
+    }),
+    prisma.blockQuizAttempt.deleteMany({ where: { userId: user.id, moduleId, submittedAt: null } }),
+  ]);
   const attempt = await prisma.blockQuizAttempt.create({
-    data: { userId: user.id, moduleId, questionIds: picked.map((q) => q.id), total: picked.length },
+    data: { userId: user.id, moduleId, mode, questionIds: picked.map((q) => q.id), total: picked.length },
   });
+  // Two skip tests started at the same moment could both pass the check above; keep only the allowed number
+  if (mode === 'TEST_OUT' && user.role === 'STUDENT') {
+    const used = await prisma.blockQuizAttempt.count({ where: { userId: user.id, moduleId, mode: 'TEST_OUT' } });
+    if (used > MAX_TEST_OUT_ATTEMPTS) {
+      await prisma.blockQuizAttempt.delete({ where: { id: attempt.id } });
+      throw forbidden('The skip test is not available.', { code: 'QUIZ_LOCKED', details: { reasons: ['No skip-test attempts left'] } });
+    }
+  }
   return {
     attempt: attemptSummary(attempt),
     passPercent: mod.quizPassPercent,

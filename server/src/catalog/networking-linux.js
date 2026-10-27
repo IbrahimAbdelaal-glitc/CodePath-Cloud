@@ -16,7 +16,8 @@ const LINUX_SRC = 'Standard Linux command behavior; the video description lists 
 
 export default {
   key: 'networking-linux',
-  version: 1,
+  // v2: 80% pass marks on in-video questions and block quizzes
+  version: 2,
   topics: {
     'net-models': 'Network models and devices',
     'net-addressing': 'IP addressing and subnetting',

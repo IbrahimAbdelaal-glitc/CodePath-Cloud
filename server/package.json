@@ -19,7 +19,8 @@
     "db:studio": "prisma studio",
     "create-admin": "node scripts/create-admin.js",
     "postinstall": "prisma generate",
-    "check:catalog": "node scripts/check-catalog.js"
+    "check:catalog": "node scripts/check-catalog.js",
+    "catalog:sync": "node scripts/sync-catalog.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

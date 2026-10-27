@@ -16,15 +16,18 @@ const roadmapSelect = {
   },
 };
 
-async function createCertificate(userId, roadmap, lessons, progressByLesson) {
+async function createCertificate(userId, roadmap, lessons, progressByLesson, passDates = []) {
   const lessonIds = lessons.map((l) => l.id);
   const quizIds = lessons.flatMap((l) => l.quizzes.map((q) => q.id));
 
-  // Completion date: when the last lesson of the path was marked complete
-  const completions = lessonIds.map((id) => {
-    const p = progressByLesson.get(id);
-    return (p.completedAt || p.updatedAt).getTime();
-  });
+  // Completion date: when the last required lesson was marked complete or the last block quiz was passed
+  const completions = [
+    ...lessonIds.map((id) => {
+      const p = progressByLesson.get(id);
+      return (p.completedAt || p.updatedAt).getTime();
+    }),
+    ...passDates.map((d) => d.getTime()),
+  ];
   const completedAt = new Date(Math.max(...completions));
 
   const [attempts, activity] = await Promise.all([
@@ -79,7 +82,8 @@ async function createCertificate(userId, roadmap, lessons, progressByLesson) {
 
 // Issues certificates for every completed path that does not have one yet (optionally limited to some paths).
 // Same completion rule as path progress: every lesson in the path is marked complete,
-// and every module that has a block quiz has a passed attempt.
+// and every module that has a block quiz has a passed attempt. Lessons in a module the student skipped
+// with a passed skip test (mode TEST_OUT) are not required.
 // Only students earn certificates; instructors and admins bypass module locks.
 export async function issueCertificates(user, roadmapIds) {
   if (user.role !== 'STUDENT') return [];
@@ -104,18 +108,24 @@ export async function issueCertificates(user, roadmapIds) {
   const passed = quizModuleIds.length
     ? await prisma.blockQuizAttempt.findMany({
         where: { userId: user.id, passed: true, moduleId: { in: quizModuleIds } },
-        distinct: ['moduleId'],
-        select: { moduleId: true },
+        orderBy: { submittedAt: 'asc' },
+        select: { moduleId: true, mode: true, submittedAt: true },
       })
     : [];
-  const passedSet = new Set(passed.map((a) => a.moduleId));
+  // First pass of each module
+  const firstPass = new Map();
+  for (const a of passed) if (!firstPass.has(a.moduleId)) firstPass.set(a.moduleId, a);
+  const passedSet = new Set(firstPass.keys());
+  const testedOut = new Set(passed.filter((a) => a.mode === 'TEST_OUT').map((a) => a.moduleId));
 
   const issued = [];
   for (const r of roadmaps) {
-    const lessons = r.modules.flatMap((m) => m.lessons);
-    if (!lessons.length || !lessons.every((l) => progressByLesson.has(l.id))) continue;
+    if (!r.modules.some((m) => m.lessons.length)) continue;
+    const lessons = r.modules.filter((m) => !testedOut.has(m.id)).flatMap((m) => m.lessons);
+    if (!lessons.every((l) => progressByLesson.has(l.id))) continue;
     if (r.modules.some((m) => m._count.blockQuestions > 0 && !passedSet.has(m.id))) continue;
-    const certificate = await createCertificate(user.id, r, lessons, progressByLesson);
+    const passDates = r.modules.filter((m) => firstPass.has(m.id)).map((m) => firstPass.get(m.id).submittedAt).filter(Boolean);
+    const certificate = await createCertificate(user.id, r, lessons, progressByLesson, passDates);
     if (certificate) issued.push(certificate);
   }
   return issued;

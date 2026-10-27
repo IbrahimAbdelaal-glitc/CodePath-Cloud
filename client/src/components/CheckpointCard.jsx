@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Flag, Play, Send, XCircle } from 'lucide-react';
+import { CheckCircle2, Flag, Play, RotateCcw, Send, XCircle } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import AnswerInput, { answerPayload, isAnswered } from './AnswerInput.jsx';
 import { Alert } from './States.jsx';
 
 // An in-video checkpoint question. The answer and explanation arrive from the server only after submitting.
-export default function CheckpointCard({ checkpoint, onAnswered, onContinue, overlay = false, showReview = false }) {
+// In courses with a pass mark, a wrong answer reveals nothing: the student rewatches the section and tries again.
+export default function CheckpointCard({ checkpoint, onAnswered, onContinue, onRewatch, overlay = false, showReview = false }) {
   const { t } = useI18n();
   const [value, setValue] = useState(checkpoint.questionType === 'MULTI_SELECT' ? [] : '');
   const [result, setResult] = useState(null);
@@ -18,6 +19,13 @@ export default function CheckpointCard({ checkpoint, onAnswered, onContinue, ove
   useEffect(() => {
     if (overlay) headingRef.current?.focus();
   }, [overlay]);
+
+  const tryAgain = () => {
+    setResult(null);
+    setValue(checkpoint.questionType === 'MULTI_SELECT' ? [] : '');
+    headingRef.current?.focus();
+  };
+  const retry = result && !result.isCorrect && result.revealed === false;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -61,7 +69,7 @@ export default function CheckpointCard({ checkpoint, onAnswered, onContinue, ove
           value={value}
           onChange={setValue}
           disabled={Boolean(result) || submitting}
-          review={result ? { correctAnswer: result.correctAnswer } : null}
+          review={result && !retry ? { correctAnswer: result.correctAnswer } : null}
         />
         {error && <Alert>{error}</Alert>}
         {!result && (
@@ -75,13 +83,29 @@ export default function CheckpointCard({ checkpoint, onAnswered, onContinue, ove
         <div className={`feedback ${result.isCorrect ? 'feedback--ok' : 'feedback--bad'}`} role="status" aria-live="polite">
           <div className="feedback__title">
             {result.isCorrect ? <CheckCircle2 size={22} aria-hidden="true" /> : <XCircle size={22} aria-hidden="true" />}
-            <strong>{result.isCorrect ? t('player.checkpointCorrect') : t('player.checkpointWrong')}</strong>
+            <strong>{result.isCorrect ? t('player.checkpointCorrect') : retry ? t('player.checkpointRetryTitle') : t('player.checkpointWrong')}</strong>
           </div>
-          <p className="feedback__why">
-            <strong>{t('quiz.why')} </strong>
-            {result.explanation}
-          </p>
-          {onContinue && (
+          {retry ? (
+            <>
+              <p className="feedback__why">{t('player.checkpointRetry')}</p>
+              <div className="row-actions">
+                {onRewatch && (
+                  <button className="btn btn--ghost btn--sm" onClick={onRewatch}>
+                    <RotateCcw size={15} aria-hidden="true" /> {t('player.rewatch')}
+                  </button>
+                )}
+                <button className="btn btn--primary btn--sm" onClick={tryAgain} autoFocus>
+                  {t('player.tryAgain')}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="feedback__why">
+              <strong>{t('quiz.why')} </strong>
+              {result.explanation}
+            </p>
+          )}
+          {onContinue && !retry && (
             <button className="btn btn--primary btn--sm" onClick={onContinue} autoFocus>
               <Play size={15} aria-hidden="true" /> {t('player.continueVideo')}
             </button>

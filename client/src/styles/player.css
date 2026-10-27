@@ -472,9 +472,6 @@ a.outline__item:hover {
   color: var(--ink);
   box-shadow: var(--shadow-lg);
 }
-:root[data-theme='light'] .dialog {
-  background: var(--surface);
-}
 .dialog::backdrop {
   background: rgb(0 0 0 / 70%);
 }
@@ -543,5 +540,120 @@ a.outline__item:hover {
     inset: 0;
     z-index: 60;
     border-radius: 0;
+  }
+}
+
+/* ── Roadmap stages ─────────────────────────────── */
+.chip--done {
+  background: var(--success-soft);
+  color: var(--success);
+  margin-inline-start: 6px;
+}
+.chip--access {
+  font-weight: 600;
+}
+.chip--access-free {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.chip--access-account {
+  background: var(--info-soft);
+  color: var(--focus);
+}
+.chip--access-paid {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.stages {
+  display: grid;
+  gap: 14px;
+}
+.stage {
+  padding: 18px 20px;
+}
+.stage.is-locked {
+  opacity: 0.85;
+}
+.stage__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.stage__head::-webkit-details-marker {
+  display: none;
+}
+/* Our own open/closed marker, so the title stays on the left */
+.stage__head::before {
+  content: '▸';
+  color: var(--brand);
+  transition: transform 0.15s var(--ease);
+}
+.stage[open] > .stage__head::before {
+  transform: rotate(90deg);
+}
+.stage__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.stage h3 {
+  margin: 18px 0 8px;
+  font-size: 1rem;
+}
+.stage__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0 24px;
+}
+.stage__course-list,
+.specialty-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.stage__course {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.stage__course > div {
+  flex: 1;
+  min-width: 0;
+}
+.stage__skip {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.specialty-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.specialty {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.specialty h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+@media (max-width: 600px) {
+  .stage__course {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

@@ -25,9 +25,14 @@ router.post('/:id/attempts', async (req, res) => {
   const { answer } = attemptSchema.parse(req.body);
   const quiz = await findQuiz(id);
   // Same access rules as the lesson: no answering questions in a locked module
-  await assertLessonAccess(req.user, quiz.lessonId);
+  const { lesson } = await assertLessonAccess(req.user, quiz.lessonId);
 
   const isCorrect = checkAnswer(quiz, answer);
+  // When a course requires a score on its in-video questions, a wrong answer does not reveal the right one,
+  // so the student rewatches and tries again. The explanation appears once they answer correctly.
+  const gated =
+    quiz.placement === 'CHECKPOINT' && req.user.role === 'STUDENT' && lesson.module.roadmap.checkpointPassPercent != null;
+  const reveal = isCorrect || !gated;
   const score = isCorrect ? quiz.points : 0;
 
   const attempt = await prisma.quizAttempt.create({
@@ -47,9 +52,10 @@ router.post('/:id/attempts', async (req, res) => {
       attempt,
       isCorrect,
       score,
-      // The correct answer and explanation are revealed only after an attempt
-      correctAnswer: quiz.correctAnswer,
-      explanation: quiz.explanation,
+      // The correct answer and explanation are revealed only after an attempt (in gated courses, a correct one)
+      revealed: reveal,
+      correctAnswer: reveal ? quiz.correctAnswer : null,
+      explanation: reveal ? quiz.explanation : null,
       options: quizOptions(quiz),
       topic: { ...topic, name: quiz.topic.name },
       totalScore: totals._sum.score || 0,

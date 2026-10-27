@@ -123,6 +123,8 @@ router.get('/:id', async (req, res) => {
         .map((q) => ({
           ...publicQuiz(q),
           answered: attemptsByQuiz.get(q.id).length > 0,
+          // Latest answer was right (attempts are newest first)
+          correct: Boolean(attemptsByQuiz.get(q.id)[0]?.isCorrect),
           // Review flags are only shown to staff
           ...(isStaff && { needsReview: q.needsReview, sourceNote: q.sourceNote }),
         })),
@@ -154,7 +156,8 @@ router.put('/:id/progress', async (req, res) => {
   const { isCompleted } = progressSchema.parse(req.body);
   const { lesson } = await assertLessonAccess(req.user, id);
 
-  // Sequential courses: completion requires the watched video and answered checkpoints, and cannot be undone
+  // Sequential courses: completion requires the watched video and the in-video questions (at the pass mark, if the
+  // course sets one), and cannot be undone
   if (req.user.role === 'STUDENT' && lesson.module.roadmap.isSequential) {
     if (!isCompleted) throw forbidden('Completed lessons in this course stay completed.');
     const result = await tryCompleteLesson(req.user, id);

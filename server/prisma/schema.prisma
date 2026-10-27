@@ -125,6 +125,9 @@ model Roadmap {
   // Set on courses created from the built-in catalog; a higher catalog version re-syncs their content
   catalogKey       String?          @unique
   catalogVersion   Int?
+  // Score needed on a lesson's in-video questions (latest answer to each) before the lesson completes.
+  // Null keeps the original rule: answering every question is enough.
+  checkpointPassPercent Int?
   createdById   String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -158,6 +161,18 @@ model Module {
   quizQuestionCount Int                 @default(10)
   quizPassPercent   Int                 @default(70)
   catalogKey        String?             @unique
+  // Experienced students may take the block exam as a skip test (mode TEST_OUT) before doing the lessons
+  allowTestOut      Boolean             @default(false)
+  // Whole courses a student completes as part of this module (roadmap stages that reuse existing courses)
+  linkedRoadmapIds  String[]            @default([])
+  // Stage details shown on the course page
+  learningOutcomes  String[]            @default([])
+  prerequisiteNotes String[]            @default([])
+  timeEstimate      String?
+  practice          String?
+  nextSteps         String?
+  // Specialty tracks: [{ key, title, summary, roles, courses: [{ slug, title }], resources: [{ title, url, publisher, access }] }]
+  specialties       Json                @default("[]")
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   roadmap          Roadmap              @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
@@ -182,6 +197,8 @@ model ModuleReading {
   url        String
   kind       ReadingKind @default(ARTICLE)
   note       String?
+  // FREE, ACCOUNT (free but needs sign-up) or PAID; null when not stated
+  access     String?
   order      Int         @default(0)
   catalogKey String?     @unique
   module     Module      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -227,6 +244,8 @@ model BlockQuizAttempt {
   total       Int
   percent     Int       @default(0)
   passed      Boolean   @default(false)
+  // EXAM after the lessons, or TEST_OUT to show prior knowledge and skip them
+  mode        String    @default("EXAM")
   startedAt   DateTime  @default(now())
   submittedAt DateTime?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -477,4 +496,11 @@ model Bookmark {
 
   @@unique([userId, lessonId])
   @@index([lessonId])
+}
+
+// Lease that stops two server instances from syncing the built-in catalog at the same time
+model CatalogLock {
+  name        String   @id
+  owner       String
+  lockedUntil DateTime
 }

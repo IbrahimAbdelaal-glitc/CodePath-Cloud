@@ -41,7 +41,10 @@ async function seedTopics() {
 
 async function seedRoadmap({ data, content }) {
   const contents = loadLessonContent(content);
-  const { roadmap: rm, modules } = data;
+  // The programming paths are archived: kept for existing learners' records but hidden from the student catalog
+  // (the site teaches cybersecurity only). An admin can republish one from the admin area.
+  const rm = { ...data.roadmap, isPublished: false, isFeatured: false };
+  const { modules } = data;
 
   const existing = await prisma.roadmap.findUnique({
     where: { slug: rm.slug },

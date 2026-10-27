@@ -127,10 +127,24 @@ export async function lessonsForTopics(tags) {
   return byTag;
 }
 
+// ── Skip tests ─────────────────────────────────────────────────────────
+// Modules the student skipped by passing their block exam as a skip test (mode TEST_OUT).
+// Their lessons no longer have to be completed to unlock what follows, and they stay open for review.
+export async function testedOutModules(userId, moduleIds) {
+  if (!userId || !moduleIds.length) return new Set();
+  const passes = await prisma.blockQuizAttempt.findMany({
+    where: { userId, passed: true, mode: 'TEST_OUT', moduleId: { in: moduleIds } },
+    distinct: ['moduleId'],
+    select: { moduleId: true },
+  });
+  return new Set(passes.map((p) => p.moduleId));
+}
+
 // ── Module locking ───────────────────────────────────────────────────────
 // A module is locked if (a) any lesson in its prerequisite modules is incomplete,
 // (b) the student has a "needs review" topic from those prerequisite modules, or
 // (c) a prerequisite module has a block quiz the student has not passed yet.
+// A prerequisite module passed with a skip test waives (a) and (b) for that module.
 export async function computeModuleAccess(userId, moduleIds) {
   const result = new Map();
   if (!moduleIds.length) return result;
@@ -162,7 +176,7 @@ export async function computeModuleAccess(userId, moduleIds) {
     m.prerequisites.filter((p) => p.prerequisite._count.blockQuestions > 0).map((p) => p.prerequisite.id),
   );
 
-  const [completed, weaknesses, passedQuizzes] = userId
+  const [completed, weaknesses, passedQuizzes, testedOut] = userId
     ? await Promise.all([
         prisma.userProgress.findMany({
           where: { userId, isCompleted: true, lessonId: { in: prereqLessonIds } },
@@ -179,8 +193,9 @@ export async function computeModuleAccess(userId, moduleIds) {
               select: { moduleId: true },
             })
           : [],
+        testedOutModules(userId, quizModuleIds),
       ])
-    : [[], [], []];
+    : [[], [], [], new Set()];
 
   const completedSet = new Set(completed.map((p) => p.lessonId));
   const weakByTag = new Map(weaknesses.map((w) => [w.topicTag, w]));
@@ -192,6 +207,7 @@ export async function computeModuleAccess(userId, moduleIds) {
     const quizzesToPass = [];
     const reviewTags = new Set();
     for (const { prerequisite: p } of m.prerequisites) {
+      if (testedOut.has(p.id)) continue;
       const total = p.lessons.length;
       const done = p.lessons.filter((l) => completedSet.has(l.id)).length;
       if (done < total) incompleteModules.push({ id: p.id, title: p.title, completed: done, total });
@@ -262,7 +278,7 @@ export async function assertLessonAccess(user, lessonId) {
       title: true,
       order: true,
       moduleId: true,
-      module: { select: { roadmap: { select: { id: true, slug: true, isSequential: true } } } },
+      module: { select: { roadmap: { select: { id: true, slug: true, isSequential: true, checkpointPassPercent: true } } } },
     },
   });
   if (!lesson) throw notFound('Lesson not found');
@@ -276,7 +292,8 @@ export async function assertLessonAccess(user, lessonId) {
   }
 
   // Sequential courses: a lesson opens only after the lesson before it in the module is complete
-  if (user.role === 'STUDENT' && lesson.module.roadmap.isSequential) {
+  // (unless the student skipped the whole module with a skip test)
+  if (user.role === 'STUDENT' && lesson.module.roadmap.isSequential && !(await testedOutModules(user.id, [lesson.moduleId])).size) {
     const previous = await prisma.lesson.findFirst({
       where: { moduleId: lesson.moduleId, order: { lt: lesson.order } },
       orderBy: { order: 'desc' },

@@ -17,19 +17,28 @@ if (isProduction && jwtSecret.length < 32) {
 
 required('DATABASE_URL');
 
+// Comma-separated list of allowed origins: https://app.vercel.app,http://localhost:5173
+const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+// Public URL of the web app, used to build links in emails (password reset). In production without APP_URL, the first
+// https origin in CORS_ORIGIN (the deployed web app) is used, so reset links never point at localhost.
+const appUrl = (
+  process.env.APP_URL ||
+  (isProduction && corsOrigins.find((o) => o.startsWith('https://'))) ||
+  'http://localhost:5173'
+).replace(/\/$/, '');
+
 export const config = {
   isProduction,
   port: Number(process.env.PORT) || 4000,
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  // Comma-separated list of allowed origins: https://app.vercel.app,http://localhost:5173
-  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173')
-    .split(',')
-    .map((o) => o.trim().replace(/\/$/, ''))
-    .filter(Boolean),
+  corsOrigins,
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 12,
-  // Public URL of the web app, used to build links in emails (password reset)
-  appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  appUrl,
   resetTokenMinutes: Number(process.env.RESET_TOKEN_MINUTES) || 30,
   mail: {
     // HTTPS email APIs. Preferred on hosts that block outbound SMTP ports (Render's free plan does).
@@ -54,6 +63,4 @@ export const config = {
     forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
     maxVideoMb: Number(process.env.VIDEO_MAX_MB) || 1024,
   },
-  // Create the built-in cybersecurity courses on start-up when they are missing (or older than the code)
-  autoSeedCourses: process.env.AUTO_SEED_COURSES !== 'false',
 };

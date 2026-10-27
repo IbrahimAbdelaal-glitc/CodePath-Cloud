@@ -18,7 +18,8 @@ const socSrc = (chapter, std) =>
 
 export default {
   key: 'defensive-ops',
-  version: 1,
+  // v2: 80% pass marks on in-video questions and block quizzes
+  version: 2,
   topics: {
     'def-threats': 'Threats and indicators',
     'def-hardening': 'Hardening and network defense',

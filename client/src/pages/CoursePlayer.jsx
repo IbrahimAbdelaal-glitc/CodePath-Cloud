@@ -5,11 +5,13 @@ import {
   ArrowRight,
   Award,
   BookOpen,
+  Briefcase,
   CheckCircle2,
   ChevronDown,
   CircleDot,
   Circle,
   ClipboardCheck,
+  Clock,
   ExternalLink,
   Flag,
   Library,
@@ -17,6 +19,7 @@ import {
   Lock,
   Menu,
   PlayCircle,
+  SkipForward,
   Upload,
   X,
 } from 'lucide-react';
@@ -86,7 +89,10 @@ export function CourseOutline({ course, currentId, onNavigate }) {
                 onClick={() => toggle(m.id)}
               >
                 <span className="outline__module-num">{m.locked ? <Lock size={14} aria-label={t('player.locked')} /> : mi + 1}</span>
-                <span className="outline__module-title">{m.title}</span>
+                <span className="outline__module-title">
+                  {m.title}
+                  {m.skipped && <span className="chip chip--done">{t('player.skipped')}</span>}
+                </span>
                 <span className="outline__module-meta">
                   {fmt.number(m.progress.completed)}/{fmt.number(m.progress.total)}
                 </span>
@@ -126,6 +132,35 @@ export function CourseOutline({ course, currentId, onNavigate }) {
                       </li>
                     );
                   })}
+                  {m.linkedCourses.map((c) => (
+                    <li key={c.id}>
+                      {m.locked ? (
+                        <span className="outline__item is-locked" aria-disabled="true">
+                          <Lock size={17} className="outline__icon" aria-hidden="true" />
+                          <span className="outline__title">{c.title}</span>
+                        </span>
+                      ) : (
+                        <Link to={`/learn/${c.slug}`} className="outline__item outline__item--course" onClick={onNavigate}>
+                          {c.completed ? (
+                            <CheckCircle2 size={17} className="outline__icon" aria-hidden="true" />
+                          ) : (
+                            <BookOpen size={17} className="outline__icon" aria-hidden="true" />
+                          )}
+                          <span className="outline__title">{c.title}</span>
+                          <span className="outline__meta">{c.completed ? t('player.courseDone') : t('player.coursePercent', { n: c.percent })}</span>
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                  {m.quiz?.testOut?.available && (
+                    <li>
+                      <Link to={`/learn/${course.slug}/quiz/${m.id}?mode=skip`} className="outline__item outline__item--skip" onClick={onNavigate}>
+                        <SkipForward size={17} className="outline__icon" aria-hidden="true" />
+                        <span className="outline__title">{t('player.skipTest')}</span>
+                        <span className="outline__meta">{m.quiz.testOut.attemptsLeft}/{m.quiz.testOut.attemptsAllowed}</span>
+                      </Link>
+                    </li>
+                  )}
                   {m.quiz && (
                     <li>
                       {(() => {
@@ -219,8 +254,11 @@ function CourseHome({ course }) {
   const target = course.nextStep
     ? course.nextStep.type === 'QUIZ'
       ? `/learn/${course.slug}/quiz/${course.nextStep.moduleId}`
-      : `/learn/${course.slug}/${course.nextStep.lessonId}`
+      : course.nextStep.type === 'COURSE'
+        ? `/learn/${course.nextStep.slug}`
+        : `/learn/${course.slug}/${course.nextStep.lessonId}`
     : null;
+  const stages = course.modules.filter((m) => m.learningOutcomes.length || m.practice || m.linkedCourses.length || m.specialties.length);
   const resumeTarget = course.resume && !course.resume.completed ? `/learn/${course.slug}/${course.resume.lessonId}` : null;
 
   useEffect(() => {
@@ -268,8 +306,24 @@ function CourseHome({ course }) {
           <p>
             {course.nextStep.type === 'QUIZ'
               ? t(course.nextStep.retake ? 'player.nextRetake' : 'player.nextQuiz', { module: course.nextStep.moduleTitle })
-              : t('player.nextLesson', { title: course.nextStep.title, module: course.nextStep.moduleTitle })}
+              : course.nextStep.type === 'COURSE'
+                ? t('player.nextCourse', { title: course.nextStep.title, module: course.nextStep.moduleTitle })
+                : t('player.nextLesson', { title: course.nextStep.title, module: course.nextStep.moduleTitle })}
           </p>
+          {course.nextStep.type === 'COURSE' && (
+            <Link to={target} className="btn btn--secondary btn--sm">
+              <BookOpen size={15} aria-hidden="true" /> {t('player.openCourse')}
+            </Link>
+          )}
+        </section>
+      )}
+
+      {stages.length > 0 && (
+        <section aria-labelledby="stages-h" className="stages">
+          <h2 id="stages-h">{t('player.stages')}</h2>
+          {stages.map((m) => (
+            <StageCard key={m.id} course={course} stage={m} open={stages.length === 1 || m === stages.find((x) => !x.locked && x.quiz?.state !== 'PASSED')} />
+          ))}
         </section>
       )}
 
@@ -314,6 +368,165 @@ function CourseHome({ course }) {
   );
 }
 
+// One roadmap stage: time, prerequisites, outcomes, linked courses, skip test, exercises, specialties and next steps
+function StageCard({ course, stage: m, open }) {
+  const { t, fmt } = useI18n();
+  const testOut = m.quiz?.testOut;
+  return (
+    <details className={`panel stage ${m.locked ? 'is-locked' : ''}`} open={open}>
+      <summary className="stage__head">
+        <span className="stage__title">
+          {m.locked && <Lock size={16} aria-label={t('player.locked')} />} {m.title}
+        </span>
+        {m.quiz?.state === 'PASSED' && <span className="chip chip--done">{m.skipped ? t('player.skipped') : t('player.quizState.PASSED')}</span>}
+      </summary>
+      {m.description && <p>{m.description}</p>}
+      {m.timeEstimate && (
+        <p className="small">
+          <Clock size={15} aria-hidden="true" /> <strong>{t('player.stageTime')}:</strong> {m.timeEstimate}
+        </p>
+      )}
+      {m.locked && m.reasons.length > 0 && (
+        <Alert type="info">
+          <ul>
+            {m.reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+      <div className="stage__grid">
+        {m.prerequisiteNotes.length > 0 && (
+          <div>
+            <h3>{t('player.stagePrereqs')}</h3>
+            <ul>
+              {m.prerequisiteNotes.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {m.learningOutcomes.length > 0 && (
+          <div>
+            <h3>{t('player.stageOutcomes')}</h3>
+            <ul className="checklist">
+              {m.learningOutcomes.map((o) => (
+                <li key={o}>{o}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      {m.linkedCourses.length > 0 && (
+        <div className="stage__courses">
+          <h3>{t('player.stageCourses')}</h3>
+          <p className="small muted">{t('player.stageCoursesLead')}</p>
+          <ul className="stage__course-list">
+            {m.linkedCourses.map((c) => (
+              <li key={c.id} className="stage__course">
+                <div>
+                  <strong>{c.title}</strong>
+                  {c.summary && <p className="small muted">{c.summary}</p>}
+                  <ProgressBar value={c.percent} size="sm" label={t('player.coursePercent', { n: c.percent })} />
+                </div>
+                {m.locked ? (
+                  <span className="chip">
+                    <Lock size={13} aria-hidden="true" /> {t('player.locked')}
+                  </span>
+                ) : (
+                  <Link to={`/learn/${c.slug}`} className="btn btn--secondary btn--sm">
+                    {c.completed ? <CheckCircle2 size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}{' '}
+                    {c.completed ? t('player.courseDone') : t('player.openCourse')}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {testOut?.available && (
+        <div className="stage__skip">
+          <p>
+            {t('player.skipTestLead', {
+              n: fmt.number(m.quiz.questionCount),
+              pass: fmt.number(m.quiz.passPercent),
+              left: fmt.number(testOut.attemptsLeft),
+              total: fmt.number(testOut.attemptsAllowed),
+            })}
+          </p>
+          <Link to={`/learn/${course.slug}/quiz/${m.id}?mode=skip`} className="btn btn--secondary btn--sm">
+            <SkipForward size={15} aria-hidden="true" /> {t('player.takeSkipTest')}
+          </Link>
+        </div>
+      )}
+      {m.practice && (
+        <div className="stage__practice">
+          <h3>{t('player.stagePractice')}</h3>
+          <Markdown>{m.practice}</Markdown>
+        </div>
+      )}
+      {m.specialties.length > 0 && (
+        <div className="stage__specialties">
+          <h3>{t('player.specialties')}</h3>
+          <p className="small muted">{t('player.accessLegend')}</p>
+          <ul className="specialty-list">
+            {m.specialties.map((sp) => (
+              <li key={sp.key} className="specialty">
+                <h4>
+                  <Briefcase size={16} aria-hidden="true" /> {sp.title}
+                </h4>
+                <p className="small">{sp.summary}</p>
+                {sp.roles.length > 0 && (
+                  <p className="small muted">
+                    {t('player.specialtyRoles')}: {sp.roles.join(', ')}
+                  </p>
+                )}
+                {sp.courses.length > 0 && (
+                  <p className="small">
+                    {t('player.specialtyCourses')}:{' '}
+                    {sp.courses.map((c, i) => (
+                      <span key={c.slug}>
+                        {i > 0 && ', '}
+                        <Link to={`/learn/${c.slug}`}>{c.title}</Link>
+                      </span>
+                    ))}
+                  </p>
+                )}
+                {sp.resources.length > 0 && (
+                  <ul className="reading-list">
+                    {sp.resources.map((r) => (
+                      <li key={r.url}>
+                        <AccessChip access={r.access} />
+                        <a href={r.url} target="_blank" rel="noopener noreferrer">
+                          {r.title} <ExternalLink size={13} aria-label={t('common.opensNewTab')} />
+                        </a>
+                        <span className="reading-list__meta">{[r.publisher, r.note].filter(Boolean).join(' · ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {m.nextSteps && (
+        <div className="stage__next">
+          <h3>{t('player.stageNext')}</h3>
+          <Markdown>{m.nextSteps}</Markdown>
+        </div>
+      )}
+    </details>
+  );
+}
+
+// Free, Free account or Paid
+export function AccessChip({ access }) {
+  const { t } = useI18n();
+  if (!access) return null;
+  return <span className={`chip chip--access chip--access-${access.toLowerCase()}`}>{t(`access.${access}`)}</span>;
+}
+
 export function ReadingList({ readings }) {
   const { t } = useI18n();
   return (
@@ -321,6 +534,7 @@ export function ReadingList({ readings }) {
       {readings.map((r) => (
         <li key={r.id}>
           <span className={`chip chip--reading`}>{t(`readingKind.${r.kind}`)}</span>
+          <AccessChip access={r.access} />
           <a href={r.url} target="_blank" rel="noopener noreferrer">
             {r.title} <ExternalLink size={13} aria-label={t('common.opensNewTab')} />
           </a>
@@ -371,6 +585,8 @@ function LessonView({ course, lessonId, onCourseChanged }) {
   const [completing, setCompleting] = useState(false);
   const dismissed = useRef(new Set());
   const lesson = data?.lesson;
+  // With a pass mark, a question counts as done only when answered correctly; otherwise answering is enough
+  const gated = course.checkpointPassPercent != null;
 
   useActivityHeartbeat(lessonId, Boolean(lesson) && user?.role === 'STUDENT');
 
@@ -378,10 +594,10 @@ function LessonView({ course, lessonId, onCourseChanged }) {
     if (!lesson) return;
     setWatch(lesson.videoProgress);
     setCompletion(lesson.completion);
-    setAnswered(new Set(lesson.checkpoints.filter((c) => c.answered).map((c) => c.id)));
+    setAnswered(new Set(lesson.checkpoints.filter((c) => (gated ? c.correct : c.answered)).map((c) => c.id)));
     setActive(null);
     dismissed.current = new Set();
-  }, [lesson]);
+  }, [lesson, gated]);
 
   const steps = useMemo(() => courseSteps(course), [course]);
   const index = steps.findIndex((s) => s.type === 'LESSON' && s.id === lessonId);
@@ -431,8 +647,18 @@ function LessonView({ course, lessonId, onCourseChanged }) {
   );
 
   const onCheckpointAnswered = (cp, result) => {
-    setAnswered((s) => new Set(s).add(cp.id));
+    if (result.isCorrect || !gated) setAnswered((s) => new Set(s).add(cp.id));
     handleCompletion(result);
+  };
+
+  // Wrong answer in a gated course: go back to the previous question (or the start) and watch that part again.
+  // The question is not dismissed, so it appears again when the video reaches it.
+  const rewatch = () => {
+    const earlier = lesson.checkpoints.filter((c) => c.triggerSeconds != null && c.triggerSeconds < (active?.triggerSeconds ?? 0));
+    const from = earlier.length ? Math.max(...earlier.map((c) => c.triggerSeconds)) + 1 : 0;
+    setActive(null);
+    playerRef.current?.seek(from);
+    playerRef.current?.play();
   };
 
   const continueVideo = () => {
@@ -516,6 +742,7 @@ function LessonView({ course, lessonId, onCourseChanged }) {
               showReview={isStaff}
               onAnswered={(r) => onCheckpointAnswered(active, r)}
               onContinue={continueVideo}
+              onRewatch={lesson.video ? rewatch : undefined}
             />
           </div>
         )}
@@ -561,7 +788,13 @@ function LessonView({ course, lessonId, onCourseChanged }) {
               )}
               {lesson.checkpoints.length > 0 && (
                 <p className="small">
-                  {t('player.checkpointsAnswered', { done: fmt.number(answered.size), total: fmt.number(lesson.checkpoints.length) })}
+                  {gated
+                    ? t('player.checkpointsCorrect', {
+                        done: fmt.number(answered.size),
+                        total: fmt.number(lesson.checkpoints.length),
+                        pass: fmt.number(course.checkpointPassPercent),
+                      })
+                    : t('player.checkpointsAnswered', { done: fmt.number(answered.size), total: fmt.number(lesson.checkpoints.length) })}
                 </p>
               )}
             </div>

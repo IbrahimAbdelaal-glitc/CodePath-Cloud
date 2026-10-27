@@ -15,7 +15,8 @@ const clip = (id, start, end) => youtube(id, { start, end, credit: CREDIT });
 
 export default {
   key: 'cyber-foundations',
-  version: 1,
+  // v2: 80% pass marks on in-video questions and block quizzes
+  version: 2,
   topics: {
     'cyber-accounts': 'Securing accounts',
     'cyber-data': 'Securing data',
@@ -76,8 +77,8 @@ This course follows **CS50's Introduction to Cybersecurity** from Harvard Univer
 
 ### How the course player works
 
-- Lessons unlock **one at a time**. Watch at least 90% of a video and answer its checkpoint questions to complete it.
-- Each module ends with a **block quiz** drawn from a question bank. Pass it (70% or more) to unlock the next module.
+- Lessons unlock **one at a time**. Watch at least 90% of a video and score at least 80% on its checkpoint questions to complete it. A wrong answer can be retried after rewatching.
+- Each module ends with a **block quiz** drawn from a question bank. Pass it (80% or more) to unlock the next module. You can retake it.
 - Your place is saved automatically, so you can stop and resume at any time.
 - Further reading for each module is listed at the end of the module.`,
           takeaways: ['The course has five modules, one per CS50 lecture.', 'Each module ends with a block quiz you must pass to continue.'],
@@ -92,7 +93,7 @@ This course follows **CS50's Introduction to Cybersecurity** from Harvard Univer
                 'Bookmarking every lesson',
               ],
               answer: 'Passing the block quiz at the end of the current module',
-              explanation: 'Every module ends with a block quiz. Passing it with 70% or more unlocks the next module.',
+              explanation: 'Every module ends with a block quiz. Passing it with 80% or more unlocks the next module.',
               topic: 'cyber-accounts',
               source: 'Course rules',
             },

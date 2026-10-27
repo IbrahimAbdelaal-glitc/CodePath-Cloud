@@ -8,7 +8,9 @@ import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { computeModuleAccess, roadmapVisibilityWhere } from '../services/learning.js';
 import { issueCertificates } from '../services/certificates.js';
 import {
+  MAX_TEST_OUT_ATTEMPTS,
   blockQuizOverview,
+  linkedCourseStatus,
   reviewBlockQuiz,
   startBlockQuiz,
   submitBlockQuiz,
@@ -19,6 +21,7 @@ import {
 const router = Router();
 
 // Lesson states: LOCKED, AVAILABLE, IN_PROGRESS, COMPLETED. Quiz states: LOCKED, AVAILABLE, FAILED, PASSED.
+// A module the student skipped with a skip test keeps its lessons open for review, and they no longer count as required.
 router.get('/:slug/outline', optionalAuth, async (req, res) => {
   const slug = z.string().max(80).parse(req.params.slug);
   const roadmap = await prisma.roadmap.findFirst({
@@ -69,17 +72,23 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
   ]);
   const doneSet = new Set(done.map((d) => d.lessonId));
   const watchBy = new Map(watches.map((w) => [w.lessonId, w]));
+  const testedOut = new Set(attempts.filter((t) => t.passed && t.mode === 'TEST_OUT').map((t) => t.moduleId));
+  const linkedIds = [...new Set(roadmap.modules.flatMap((m) => m.linkedRoadmapIds))];
+  const linkedById = new Map((await linkedCourseStatus(user?.id, linkedIds)).map((c) => [c.id, c]));
+  let requiredLessons = 0;
+  let requiredDone = 0;
 
   let resume = null;
   let nextStep = null;
   const modules = roadmap.modules.map((m) => {
     const a = access.get(m.id);
     const moduleLocked = !user || (isStudent && a.locked);
+    const skipped = testedOut.has(m.id);
     let previousDone = true;
     const lessons = m.lessons.map((l) => {
       const completed = doneSet.has(l.id);
       const watch = watchBy.get(l.id);
-      const sequentialLock = roadmap.isSequential && isStudent && !previousDone;
+      const sequentialLock = roadmap.isSequential && isStudent && !previousDone && !skipped;
       const state = completed
         ? 'COMPLETED'
         : moduleLocked || sequentialLock
@@ -105,10 +114,18 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
 
     const moduleAttempts = attempts.filter((t) => t.moduleId === m.id);
     const allLessonsDone = lessons.every((l) => l.state === 'COMPLETED');
+    const linkedCourses = m.linkedRoadmapIds.map((id) => linkedById.get(id)).filter(Boolean);
+    const linkedDone = linkedCourses.every((c) => c.completed);
+    if (!skipped) {
+      requiredLessons += lessons.length;
+      requiredDone += lessons.filter((l) => l.state === 'COMPLETED').length;
+    }
     let quiz = null;
     if (m._count.blockQuestions > 0) {
       const passed = moduleAttempts.some((t) => t.passed);
       const best = moduleAttempts.reduce((b, t) => Math.max(b, t.percent), -1);
+      const exams = moduleAttempts.filter((t) => t.mode !== 'TEST_OUT');
+      const testOutsUsed = moduleAttempts.length - exams.length;
       quiz = {
         bankSize: m._count.blockQuestions,
         questionCount: Math.min(m.quizQuestionCount, m._count.blockQuestions),
@@ -118,18 +135,27 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
         lastPercent: moduleAttempts[0]?.percent ?? null,
         state: passed
           ? 'PASSED'
-          : moduleLocked || (isStudent && !allLessonsDone)
+          : moduleLocked || (isStudent && (!allLessonsDone || !linkedDone))
             ? 'LOCKED'
-            : moduleAttempts.length
+            : exams.length
               ? 'FAILED'
               : 'AVAILABLE',
+        testOut: m.allowTestOut
+          ? {
+              attemptsAllowed: MAX_TEST_OUT_ATTEMPTS,
+              attemptsLeft: Math.max(0, MAX_TEST_OUT_ATTEMPTS - testOutsUsed),
+              available: Boolean(user) && !passed && !moduleLocked && testOutsUsed < MAX_TEST_OUT_ATTEMPTS,
+            }
+          : null,
       };
     }
 
-    // Next step: the first unfinished lesson, otherwise the module's quiz if it is not passed yet
-    if (!nextStep && user) {
+    // Next step: the first unfinished lesson, then any linked course, then the module's quiz if it is not passed yet
+    if (!nextStep && user && !skipped) {
       const lesson = lessons.find((l) => l.state === 'AVAILABLE' || l.state === 'IN_PROGRESS');
+      const course = !moduleLocked && linkedCourses.find((c) => !c.completed);
       if (lesson) nextStep = { type: 'LESSON', lessonId: lesson.id, title: lesson.title, moduleTitle: m.title };
+      else if (course && allLessonsDone) nextStep = { type: 'COURSE', slug: course.slug, title: course.title, moduleTitle: m.title };
       else if (quiz && (quiz.state === 'AVAILABLE' || quiz.state === 'FAILED')) {
         nextStep = { type: 'QUIZ', moduleId: m.id, title: `${m.title}: block quiz`, moduleTitle: m.title, retake: quiz.state === 'FAILED' };
       }
@@ -148,10 +174,20 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
       difficulty: m.difficulty,
       locked: moduleLocked,
       reasons: user ? a.reasons : [],
+      skipped,
       progress: { completed: lessons.filter((l) => l.state === 'COMPLETED').length, total: lessons.length },
       lessons,
       quiz,
-      readings: m.readings.map(({ id, title, authors, publisher, year, url, kind, note }) => ({
+      linkedCourses,
+      // Stage details
+      learningOutcomes: m.learningOutcomes,
+      prerequisiteNotes: m.prerequisiteNotes,
+      timeEstimate: m.timeEstimate,
+      estimatedMinutes: m.estimatedMinutes,
+      practice: m.practice,
+      nextSteps: m.nextSteps,
+      specialties: Array.isArray(m.specialties) ? m.specialties : [],
+      readings: m.readings.map(({ id, title, authors, publisher, year, url, kind, note, access }) => ({
         id,
         title,
         authors,
@@ -160,12 +196,14 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
         url,
         kind,
         note,
+        access,
       })),
     };
   });
 
-  const totalLessons = lessonIds.length;
-  const completedLessons = doneSet.size;
+  // Progress counts required lessons only (lessons in skipped modules are optional review)
+  const totalLessons = requiredLessons;
+  const completedLessons = requiredDone;
   const quizModules = modules.filter((m) => m.quiz);
   const quizzesPassed = quizModules.filter((m) => m.quiz.state === 'PASSED').length;
   const steps = totalLessons + quizModules.length;
@@ -191,6 +229,7 @@ router.get('/:slug/outline', optionalAuth, async (req, res) => {
       learningOutcomes: roadmap.learningOutcomes,
       sources: Array.isArray(roadmap.sources) ? roadmap.sources : [],
       isSequential: roadmap.isSequential,
+      checkpointPassPercent: roadmap.checkpointPassPercent,
       progress: user
         ? {
             lessonsCompleted: completedLessons,
@@ -214,9 +253,12 @@ router.get('/modules/:id/quiz', requireAuth, async (req, res) => {
   res.json(await blockQuizOverview(req.user, id));
 });
 
+const startSchema = z.object({ mode: z.enum(['EXAM', 'TEST_OUT']).default('EXAM') });
+
 router.post('/modules/:id/quiz/attempts', requireAuth, async (req, res) => {
   const { id } = idParams.parse(req.params);
-  res.status(201).json(await startBlockQuiz(req.user, id));
+  const { mode } = startSchema.parse(req.body ?? {});
+  res.status(201).json(await startBlockQuiz(req.user, id, mode));
 });
 
 const answerValue = z.union([z.string().max(2000), z.array(z.string().max(300)).max(10), z.null()]);

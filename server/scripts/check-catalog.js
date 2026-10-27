@@ -1,10 +1,13 @@
 // Checks the built-in course catalog without a database: answers match options, checkpoints fall inside their
-// clips, keys are unique, and every module has enough block-quiz questions. Usage: npm run check:catalog
+// clips, every video has a question, keys are unique, every module has enough block-quiz questions, pass marks are
+// at least 80%, linked courses exist, and resources carry an access label. Usage: npm run check:catalog
 import courses from '../src/catalog/index.js';
 
 const CHOICE = new Set(['MULTIPLE_CHOICE', 'TRUE_FALSE', 'MULTI_SELECT']);
+const ACCESS = new Set(['FREE', 'ACCOUNT', 'PAID']);
 const errors = [];
 const fail = (where, msg) => errors.push(`${where}: ${msg}`);
+const https = (url) => /^https:\/\//.test(url);
 
 function checkQuestion(q, where) {
   const type = q.type || (q.options ? 'MULTIPLE_CHOICE' : 'FILL_IN_THE_BLANK');
@@ -25,21 +28,45 @@ function checkQuestion(q, where) {
 
 let totals = { lessons: 0, checkpoints: 0, bank: 0, readings: 0 };
 const types = {};
+// Linked courses are synced first, so a course may only link courses listed before it
+const earlier = new Set();
+const linkOk = (key, where) => earlier.has(key) || fail(where, `links "${key}", which is not a course listed before it`);
+
 for (const course of courses) {
   // Module and lesson keys are stored in different tables, so each only needs to be unique among its own kind
   const seen = { module: new Set(), lesson: new Set() };
   const unique = (kind, k, where) => (seen[kind].has(k) ? fail(where, `duplicate ${kind} key ${k}`) : seen[kind].add(k));
   for (const tag of Object.keys(course.topics)) if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(tag)) fail(course.key, `bad topic tag ${tag}`);
+  if ((course.roadmap.checkpointPassPercent ?? 80) < 80) fail(course.key, 'in-video question pass mark is below 80%');
+
   for (const m of course.modules) {
+    const mw = `${course.key}/${m.key}`;
     unique('module', m.key, course.key);
+    if ((m.passPercent ?? 80) < 80) fail(mw, 'block quiz pass mark is below 80%');
+    for (const key of m.linkedCourses || []) linkOk(key, mw);
+    for (const sp of m.specialties || []) {
+      const sw = `${mw}/specialty ${sp.key}`;
+      for (const key of sp.courses || []) linkOk(key, sw);
+      for (const r of sp.resources || []) {
+        if (!ACCESS.has(r.access)) fail(sw, `resource "${r.title}" needs access FREE, ACCOUNT or PAID`);
+        if (!https(r.url)) fail(sw, `resource URL must be https: ${r.url}`);
+      }
+    }
+
     for (const l of m.lessons) {
-      const where = `${course.key}/${m.key}/${l.key}`;
+      const where = `${mw}/${l.key}`;
       unique('lesson', l.key, where);
       totals.lessons += 1;
+      if (!l.content || l.content.length < 10) fail(where, 'content too short');
+      // Reading-only lessons (no video) are allowed; every video needs at least one in-video question
       const v = l.video;
+      if (!v) {
+        if (l.checkpoints?.length) fail(where, 'checkpoints need a video');
+        continue;
+      }
       const length = v.start != null && v.end != null ? v.end - v.start : v.duration;
       if (!v.youtubeId || !length) fail(where, 'video needs an id and a duration or start/end');
-      if (!l.content || l.content.length < 10) fail(where, 'content too short');
+      if (!l.checkpoints?.length) fail(where, 'every video needs at least one in-video question');
       for (const [i, c] of (l.checkpoints || []).entries()) {
         const cw = `${where}/checkpoint ${i + 1}`;
         totals.checkpoints += 1;
@@ -49,20 +76,24 @@ for (const course of courses) {
         if (!course.topics[c.topic]) fail(cw, `unknown topic ${c.topic}`);
       }
     }
+
     const lessonTitles = new Set(m.lessons.map((l) => l.title));
     for (const [i, q] of (m.bank || []).entries()) {
-      const qw = `${course.key}/${m.key}/bank ${i + 1}`;
+      const qw = `${mw}/bank ${i + 1}`;
       totals.bank += 1;
       const type = checkQuestion(q, qw);
       types[type] = (types[type] || 0) + 1;
       if (q.lesson && !lessonTitles.has(q.lesson)) fail(qw, `lesson "${q.lesson}" is not in this module`);
     }
-    if ((m.bank || []).length < 10) fail(`${course.key}/${m.key}`, `only ${(m.bank || []).length} bank questions (need 10+)`);
+    if ((m.bank || []).length < 10) fail(mw, `only ${(m.bank || []).length} bank questions (need 10+)`);
+    if ((m.quizCount ?? 10) < 10) fail(mw, 'block quiz must draw at least 10 questions');
     for (const r of m.readings || []) {
       totals.readings += 1;
-      if (!/^https:\/\//.test(r.url)) fail(`${course.key}/${m.key}`, `reading URL must be https: ${r.url}`);
+      if (!https(r.url)) fail(mw, `reading URL must be https: ${r.url}`);
+      if (r.access != null && !ACCESS.has(r.access)) fail(mw, `reading "${r.title}" has an unknown access label`);
     }
   }
+  earlier.add(course.key);
 }
 
 console.log(`${courses.length} courses, ${totals.lessons} lessons, ${totals.checkpoints} checkpoints, ${totals.bank} bank questions, ${totals.readings} readings`);

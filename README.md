@@ -286,7 +286,7 @@ The server refuses to open lessons in a locked module, mark them complete or acc
 
 ### Cybersecurity courses
 
-The courses live in `server/src/catalog/` and are created automatically when the API starts (`AUTO_SEED_COURSES`, default on). Bump a course's `version` to update its content in place: items are matched by key, so student progress on unchanged lessons is kept, and uploaded videos and instructor review decisions are preserved. Run `npm --prefix server run check:catalog` to validate the content.
+The courses live in `server/src/catalog/`. The API does not create or update them on start-up or deploy; after a catalog change, run `npm --prefix server run catalog:sync` (a dry run that prints learner data counts and the planned changes), then `npm --prefix server run catalog:sync -- --apply`, which syncs under the catalog lock and fails loudly if any learner data count went down. Bump a course's `version` to update its content in place: items are matched by key, so student progress on unchanged lessons is kept, and uploaded videos and instructor review decisions are preserved. Run `npm --prefix server run check:catalog` to validate the content.
 
 | # | Course | Level | Videos | Questions grounded in |
 | --- | --- | --- | --- | --- |
@@ -297,12 +297,26 @@ The courses live in `server/src/catalog/` and are created automatically when the
 
 Every module lists verified readings (NIST publications, RFCs, peer-reviewed papers, and Harvard sources such as the Harvard Law Review and the Belfer Center). Questions that could not be checked against the video text are flagged "Needs instructor review"; instructors can confirm them in the lesson editor and in the module's question bank.
 
+### Roadmap: Cybersecurity: Foundations to Specialization
+
+`server/src/catalog/cyber-roadmap.js` (slug `cybersecurity-foundations-to-specialization`). Four stages, each with outcomes, prerequisites, estimated time, lessons, practical exercises, a stage exam (10+ questions, 80%) and labeled readings (Free, Free account or Paid):
+
+1. **Getting started:** CS50 Understanding Technology clips (hardware, internet) and Professor Messer on the CIA triad and security controls. Skip test available.
+2. **Core skills:** links the existing courses Cybersecurity Foundations and Networking & Linux Foundations instead of repeating them; the stage exam opens once both are complete. Skip test available.
+3. **Practice:** rules of engagement, a VirtualBox and Ubuntu lab (TCM SOC 101 clips, flagged for review) and guided exercises on the student's own machines and on OverTheWire Bandit.
+4. **Choose a specialty:** SOC and incident response, network and cloud security, application security, and authorized penetration testing, each with a course on this site and labeled external resources.
+
+**Skip tests** (`BlockQuizAttempt.mode = 'TEST_OUT'`): the stage exam taken before the lessons, 2 tries per stage; leaving one unfinished uses a try. Passing counts the stage as done, waives its lessons for unlocking and certificates, and keeps them open for review.
+
+The four programming paths (`frontend`, `dotnet-backend`, `python-backend`, `ai-fullstack`) are archived: the migration `20261028000000_cyber_roadmap` sets `isPublished = false`, keeping their content, progress and certificates. An admin can republish them.
+
 ### Course player rules
 
-- Lessons unlock one at a time. A lesson completes when the student has watched at least 90% of the video and answered its checkpoint questions (right or wrong).
+- Lessons unlock one at a time. A lesson completes when the student has watched at least 90% of the video and scored at least the course's pass mark (`Roadmap.checkpointPassPercent`, 80% for every catalog course) on its in-video questions, counting the latest answer to each. A wrong answer reveals neither the answer nor the explanation; the student rewatches and tries again.
 - Watching is verified on the server: the player reports the intervals it actually played, credit is limited by elapsed wall-clock time (up to 2× speed), so skipping ahead earns nothing.
-- Checkpoints pause the video at their trigger time and show the explanation after answering. They are formative and do not affect the 70% weak-topic rule.
-- Each module ends with a block quiz drawn at random from the module's bank (10 questions, pass mark 70%). Passing it unlocks the next module; every attempt is saved and can be reviewed.
+- In-video questions do not affect the 70% weak-topic rule.
+- Each module ends with a block quiz drawn at random from the module's bank (10 or more questions, pass mark 80%). Passing it unlocks the next module; every attempt is saved and can be reviewed. Completions and passes recorded under the earlier rules are kept.
+- The catalog is synced only by `npm run catalog:sync -- --apply`, never on start-up or deploy. The sync takes a lease row (`CatalogLock`) first, so two runs cannot sync at the same time.
 
 ### Video uploads
 

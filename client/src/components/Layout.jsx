@@ -18,9 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import Logo from './Logo.jsx';
-import ThemeControl from './ThemeControl.jsx';
 import MatrixRain from './MatrixRain.jsx';
-import MotionToggle from './MotionToggle.jsx';
 
 function NavItems({ onNavigate }) {
   const { user, isStaff, isAdmin } = useAuth();
@@ -93,8 +91,6 @@ export default function Layout() {
           <nav className={`main-nav ${open ? 'is-open' : ''}`} id="main-nav" aria-label={t('nav.main')}>
             <NavItems onNavigate={() => setOpen(false)} />
             <div className="nav-account">
-              <MotionToggle />
-              <ThemeControl />
               {user ? (
                 <>
                   <Link to="/profile" className="nav-link nav-user" title={t('nav.profile')}>

@@ -34,6 +34,27 @@ export const mailMode = mail.resendApiKey
         ? 'disabled'
         : 'dev-outbox';
 
+// Startup check of the password-reset email setup. Returns lines safe to log: no keys, tokens or addresses
+// beyond the sender's domain.
+export function mailDiagnostics() {
+  const sender = parseAddress(mail.from).email;
+  const senderDomain = sender.split('@')[1] || '(none)';
+  const problems = [];
+  if (mailMode === 'disabled') {
+    problems.push('No email provider is configured: set RESEND_API_KEY or BREVO_API_KEY (Render free plans block SMTP)');
+  }
+  if (config.isProduction && (senderDomain === 'localhost' || senderDomain === '(none)')) {
+    problems.push('MAIL_FROM is not set to a sender verified with the email provider');
+  }
+  if (config.isProduction && !config.appUrl.startsWith('https://')) {
+    problems.push(`Reset links would point to ${config.appUrl}: set APP_URL to the deployed web app`);
+  }
+  return {
+    summary: `[mail] mode=${mailMode} sender-domain=${senderDomain} reset-links=${config.appUrl}/reset-password`,
+    problems,
+  };
+}
+
 // "CodePath Cloud <no-reply@example.com>" → { name, email }
 export function parseAddress(value) {
   const m = String(value).match(/^\s*(?:"?([^"<]*?)"?\s*)?<([^>]+)>\s*$/);
